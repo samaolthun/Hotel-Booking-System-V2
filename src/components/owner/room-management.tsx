@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Search,
   Filter,
@@ -222,27 +222,40 @@ export function RoomManagement() {
   const handleAddRoom = (formData: any) => {
     // Add to localStorage (already handled in RoomFormDialog)
     // Refresh rooms from localStorage
-    const updatedRooms = JSON.parse(localStorage.getItem("ownerRooms") || "[]");
+    const updatedRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
     setRooms(updatedRooms);
     setIsAddRoomOpen(false);
     toast({
       title: "Room Added",
-      description: `Room ${formData.number} has been added successfully.`,
+      description: "Room has been added successfully.",
     });
   };
 
   const handleEditRoom = (formData: any) => {
-    setRooms(
-      rooms.map((room) =>
-        room.id === currentRoom.id
-          ? {
-              ...room,
-              ...formData,
-              lastUpdated: new Date().toISOString().split("T")[0],
-            }
-          : room
-      )
+    // Create updated room data
+    const updatedRoom = {
+      ...currentRoom,
+      ...formData,
+      lastUpdated: new Date().toISOString().split("T")[0],
+    };
+
+    // Update both ownerRooms and userRooms in localStorage
+    const ownerRooms = JSON.parse(localStorage.getItem("ownerRooms") || "[]");
+    const userRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
+
+    const updatedOwnerRooms = ownerRooms.map((room: Room) =>
+      room.id === currentRoom.id ? updatedRoom : room
     );
+    const updatedUserRooms = userRooms.map((room: Room) =>
+      room.id === currentRoom.id ? updatedRoom : room
+    );
+
+    // Save back to localStorage
+    localStorage.setItem("ownerRooms", JSON.stringify(updatedOwnerRooms));
+    localStorage.setItem("userRooms", JSON.stringify(updatedUserRooms));
+
+    // Update state
+    setRooms(updatedOwnerRooms);
     setIsEditRoomOpen(false);
     toast({
       title: "Room Updated",
@@ -717,25 +730,25 @@ function RoomFormDialog({
   });
 
   // Update form data when initialData changes
-  useState(() => {
+  useEffect(() => {
     if (initialData) {
-      setFormData(initialData);
-    } else {
       setFormData({
-        number: "",
-        type: "single",
-        status: "available",
-        hotelName: "",
-        location: "",
-        mapEmbed: "",
-        price: 75,
-        capacity: 1,
-        description: "",
-        services: "",
-        photo: "",
+        number: initialData.number || "",
+        type: initialData.type || "single",
+        status: initialData.status || "available",
+        hotelName: initialData.hotelName || "",
+        location: initialData.location || "",
+        mapEmbed: initialData.mapEmbed || "",
+        price: initialData.price || 75,
+        capacity: initialData.capacity || 1,
+        description: initialData.description || "",
+        services: Array.isArray(initialData.services)
+          ? initialData.services.join(", ")
+          : initialData.services || "",
+        photo: initialData.photo || "",
       });
     }
-  });
+  }, [initialData]);
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -754,34 +767,28 @@ function RoomFormDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Save to localStorage for ownerRooms and userRooms
-    const rooms = JSON.parse(localStorage.getItem("ownerRooms") || "[]");
-    const userRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
-    const newRoom = {
-      id: Date.now(),
+    const processedFormData = {
       ...formData,
       services: formData.services
         .split(",")
         .map((s: string) => s.trim())
         .filter(Boolean),
-      lastUpdated: new Date().toISOString().split("T")[0],
     };
-    localStorage.setItem("ownerRooms", JSON.stringify([...rooms, newRoom]));
-    localStorage.setItem("userRooms", JSON.stringify([...userRooms, newRoom]));
-    onSubmit(newRoom);
-    setFormData({
-      number: "",
-      type: "single",
-      status: "available",
-      hotelName: "",
-      location: "",
-      mapEmbed: "",
-      price: 75,
-      capacity: 1,
-      description: "",
-      services: "",
-      photo: "",
-    });
+
+    if (initialData) {
+      // Edit existing room
+      onSubmit(processedFormData);
+    } else {
+      // Add new room
+      const newRoom = {
+        id: Date.now(),
+        ...processedFormData,
+        lastUpdated: new Date().toISOString().split("T")[0],
+      };
+      onSubmit(newRoom);
+    }
+
+    onClose();
   };
 
   return (

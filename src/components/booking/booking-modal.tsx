@@ -83,6 +83,17 @@ export function BookingModal({ isOpen, onClose, hotel }: BookingModalProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validation: Guests must equal Adults + Children
+    if (Number(guests) !== Number(adults) + Number(children)) {
+      toast({
+        title: "Guest count mismatch",
+        description:
+          "Number of guests must equal the sum of adults and children.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!user) {
       toast({
         title: "Please login",

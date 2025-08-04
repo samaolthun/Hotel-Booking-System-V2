@@ -10,6 +10,8 @@ import {
   ArrowUp,
   ArrowDown,
   BarChart2,
+  Edit,
+  Trash2,
 } from "lucide-react";
 import {
   Card,
@@ -27,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/src/components/ui/dialog";
 import { Input } from "@/src/components/ui/input";
 import {
@@ -40,11 +43,13 @@ import { Label } from "@/src/components/ui/label";
 import { Textarea } from "@/src/components/ui/textarea";
 import { useToast } from "@/src/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { RoomFormDialog } from "./room-form-dialog";
 
 export function OwnerDashboard() {
   const [timeRange, setTimeRange] = useState("week");
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
   const [isRoomManagementOpen, setIsRoomManagementOpen] = useState(false);
+  const [isEditRoomOpen, setIsEditRoomOpen] = useState(false);
   const [formData, setFormData] = useState({
     number: "",
     type: "single",
@@ -66,14 +71,17 @@ export function OwnerDashboard() {
     price: "",
     rating: "",
   });
+  const [currentRoom, setCurrentRoom] = useState(null);
   const { toast } = useToast();
   const router = useRouter();
 
-  // Simulate fetching data from localStorage
+  // Get rooms from localStorage (these are the rooms shown in Hotels page)
   const userRooms =
     typeof window !== "undefined"
       ? JSON.parse(localStorage.getItem("userRooms") || "[]")
       : [];
+
+  // Simulate fetching data from localStorage
   const bookings =
     typeof window !== "undefined"
       ? JSON.parse(localStorage.getItem("bookings") || "[]")
@@ -186,8 +194,91 @@ export function OwnerDashboard() {
     });
   };
 
+  // Handle edit room
+  const handleEditRoom = (room) => {
+    // Set the current room and populate the form data with room information
+    setCurrentRoom(room);
+    setFormData({
+      number: room.number || "",
+      type: room.type || "single",
+      status: room.status || "available",
+      floor: room.floor || "",
+      hotelName: room.hotelName || "",
+      location: room.location || "",
+      mapEmbed: room.mapEmbed || "",
+      price: room.price || 75,
+      capacity: room.capacity || 1,
+      description: room.description || "",
+      services: room.services || [],
+      amenities: room.amenities || [],
+      photo: room.photo || "",
+    });
+    setIsEditRoomOpen(true);
+  };
+
+  const handleEditRoomSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const rooms = JSON.parse(localStorage.getItem("ownerRooms") || "[]");
+    const userRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
+
+    // Create updated room object
+    const updatedRoom = {
+      ...currentRoom,
+      ...formData,
+      lastUpdated: new Date().toISOString().split("T")[0],
+    };
+
+    // Update both ownerRooms and userRooms
+    const updatedRooms = rooms.map((room) =>
+      room.id === currentRoom.id ? updatedRoom : room
+    );
+    const updatedUserRooms = userRooms.map((room) =>
+      room.id === currentRoom.id ? updatedRoom : room
+    );
+
+    // Save to localStorage
+    localStorage.setItem("ownerRooms", JSON.stringify(updatedRooms));
+    localStorage.setItem("userRooms", JSON.stringify(updatedUserRooms));
+
+    // Reset form and close dialog
+    setIsEditRoomOpen(false);
+    setFormData({
+      number: "",
+      type: "single",
+      status: "available",
+      floor: "",
+      hotelName: "",
+      location: "",
+      mapEmbed: "",
+      price: 75,
+      capacity: 1,
+      description: "",
+      services: [],
+      amenities: [],
+      photo: "",
+    });
+
+    // Show success message
+    toast({
+      title: "Room Updated",
+      description: `Room ${updatedRoom.number} has been updated successfully.`,
+    });
+  };
+
   const handleViewRoomDetails = () => {
     router.push("/owner/rooms"); // Change to your actual route
+  };
+
+  // Handle remove room
+  const handleRemoveRoom = (roomId) => {
+    if (window.confirm("Are you sure you want to remove this room?")) {
+      const updatedRooms = userRooms.filter((room) => room.id !== roomId);
+      localStorage.setItem("userRooms", JSON.stringify(updatedRooms));
+      toast({
+        title: "Room Removed",
+        description: "The room has been removed successfully.",
+      });
+    }
   };
 
   return (
@@ -671,138 +762,68 @@ export function OwnerDashboard() {
         open={isRoomManagementOpen}
         onOpenChange={setIsRoomManagementOpen}
       >
-        <DialogContent className="max-h-[80vh] overflow-y-auto w-full max-w-3xl">
+        <DialogContent className="max-h-[80vh] overflow-y-auto w-full max-w-4xl">
           <DialogHeader>
             <DialogTitle>Room Management</DialogTitle>
+            <DialogDescription>Manage all hotel rooms</DialogDescription>
           </DialogHeader>
-          {/* Filter Controls */}
-          <div className="flex flex-wrap gap-4 mb-4">
-            <div>
-              <Label>Type</Label>
-              <select
-                value={roomFilters.type}
-                onChange={(e) =>
-                  setRoomFilters((f) => ({ ...f, type: e.target.value }))
-                }
-                className="p-2 rounded border"
-              >
-                <option value="">All</option>
-                <option value="single">Single</option>
-                <option value="double">Double</option>
-                <option value="suite">Suite</option>
-                <option value="deluxe">Deluxe</option>
-              </select>
-            </div>
-            <div>
-              <Label>Floor</Label>
-              <input
-                type="number"
-                value={roomFilters.floor}
-                onChange={(e) =>
-                  setRoomFilters((f) => ({ ...f, floor: e.target.value }))
-                }
-                className="p-2 rounded border"
-                placeholder="Any"
-              />
-            </div>
-            {/* <div>
-              <Label>Price</Label>
-              <select
-                value={roomFilters.price}
-                onChange={(e) =>
-                  setRoomFilters((f) => ({ ...f, price: e.target.value }))
-                }
-                className="p-2 rounded border"
-              >
-                <option value="">All</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </div> */}
-            <div>
-              <Label>Rating</Label>
-              <select
-                value={roomFilters.rating}
-                onChange={(e) =>
-                  setRoomFilters((f) => ({ ...f, rating: e.target.value }))
-                }
-                className="p-2 rounded border"
-              >
-                <option value="">All</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
-          </div>
+
           {/* Room List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {userRooms
-              .filter((room) => {
-                // Filtering logic
-                if (roomFilters.type && room.type !== roomFilters.type)
-                  return false;
-                if (
-                  roomFilters.floor &&
-                  String(room.floor) !== roomFilters.floor
-                )
-                  return false;
-                if (roomFilters.price) {
-                  if (roomFilters.price === "low" && room.price > 100)
-                    return false;
-                  if (
-                    roomFilters.price === "medium" &&
-                    (room.price <= 100 || room.price > 300)
-                  )
-                    return false;
-                  if (roomFilters.price === "high" && room.price <= 300)
-                    return false;
-                }
-                if (roomFilters.rating) {
-                  if (roomFilters.rating === "high" && room.rating < 4)
-                    return false;
-                  if (
-                    roomFilters.rating === "medium" &&
-                    (room.rating < 2.5 || room.rating >= 4)
-                  )
-                    return false;
-                  if (roomFilters.rating === "low" && room.rating >= 2.5)
-                    return false;
-                }
-                return true;
-              })
-              .map((room) => (
-                <Card key={room.id}>
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-bold">
-                          {room.number} - {room.type}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Floor: {room.floor}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Price: ${room.price}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Rating: {room.rating || "N/A"}
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        onClick={() => router.push(`/owner/rooms/${room.id}`)}
-                      >
-                        View Details
-                      </Button>
+          <div className="grid gap-4">
+            {userRooms.map((room) => (
+              <Card key={room.id} className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-4">
+                    {room.photo && (
+                      <img
+                        src={room.photo}
+                        alt={room.type}
+                        className="w-24 h-24 object-cover rounded"
+                      />
+                    )}
+                    <div>
+                      <h3 className="font-bold">{room.type}</h3>
+                      <p className="text-sm text-gray-500">
+                        Room {room.number}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Floor {room.floor}
+                      </p>
+                      <p className="font-medium">${room.price}/night</p>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditRoom(room)}
+                    >
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleRemoveRoom(room.id)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
           </div>
         </DialogContent>
       </Dialog>
+
+      <RoomFormDialog
+        isOpen={isEditRoomOpen}
+        onClose={() => setIsEditRoomOpen(false)}
+        onSubmit={handleEditRoomSubmit}
+        title="Edit Room"
+        initialData={currentRoom}
+      />
     </div>
   );
 }
