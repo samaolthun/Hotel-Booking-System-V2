@@ -1,7 +1,7 @@
-import { Header } from "@/src/components/layout/header";
-import { Footer } from "@/src/components/layout/footer";
-import { HotelListing } from "@/src/components/hotels/hotel-listing";
-import { SearchBar } from "@/src/components/search/search-bar";
+import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/layout/footer";
+import { HotelListing } from "@/components/hotels/hotel-listing";
+import { SearchBar } from "@/components/search/search-bar";
 
 export default function HotelsPage() {
   return (
@@ -16,13 +16,13 @@ export default function HotelsPage() {
         </div>
 
         <HotelListing />
-        <div className="flex justify-center my-8">
+        {/* <div className="flex justify-center my-8">
           <a href="/services">
             <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-lg text-lg shadow-lg transition-all">
               Get Service
             </button>
           </a>
-        </div>
+        </div> */}
       </main>
       <Footer />
     </div>

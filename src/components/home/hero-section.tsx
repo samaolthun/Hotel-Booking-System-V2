@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getRoomsByFilters } from "@/src/lib/data/hotels";
-import { RoomCard } from "@/src/components/hotels/room-card";
-import { FeaturedHotels } from "@/src/components/home/featured-hotels";
+import { getRoomsByFilters } from "@/lib/data/hotels";
+import { RoomCard } from "@/components/hotels/room-card";
+import { FeaturedHotels } from "@/components/home/featured-hotels";
 import Link from "next/link";
 
 export function HeroSection() {

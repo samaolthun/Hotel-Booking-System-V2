@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Hotel,
   Users,
@@ -12,6 +12,7 @@ import {
   BarChart2,
   Edit,
   Trash2,
+  Eye,
 } from "lucide-react";
 import {
   Card,
@@ -50,6 +51,8 @@ export function OwnerDashboard() {
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
   const [isRoomManagementOpen, setIsRoomManagementOpen] = useState(false);
   const [isEditRoomOpen, setIsEditRoomOpen] = useState(false);
+  const [isRoomDetailsOpen, setIsRoomDetailsOpen] = useState(false);
+  const [isBookingDetailsOpen, setIsBookingDetailsOpen] = useState(false);
   const [formData, setFormData] = useState({
     number: "",
     type: "single",
@@ -72,6 +75,7 @@ export function OwnerDashboard() {
     rating: "",
   });
   const [currentRoom, setCurrentRoom] = useState(null);
+  const [currentBooking, setCurrentBooking] = useState(null);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -81,11 +85,60 @@ export function OwnerDashboard() {
       ? JSON.parse(localStorage.getItem("userRooms") || "[]")
       : [];
 
-  // Simulate fetching data from localStorage
-  const bookings =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("bookings") || "[]")
-      : [];
+  // First, update how you get the bookings data
+  const [bookings, setBookings] = useState(() => {
+    if (typeof window !== "undefined") {
+      const storedBookings = localStorage.getItem("bookings");
+      if (storedBookings) {
+        return JSON.parse(storedBookings).sort(
+          (a, b) =>
+            new Date(b.bookingDate || b.date) -
+            new Date(a.bookingDate || a.date)
+        );
+      }
+    }
+    return [];
+  });
+
+  // Validate booking data
+  const validateBookingData = () => {
+    const bookings = JSON.parse(localStorage.getItem("bookings") || "[]");
+    console.log("Current Bookings:", bookings);
+
+    // Validate each booking
+    bookings.forEach((booking, index) => {
+      const isValid =
+        booking.email &&
+        booking.phone &&
+        booking.roomNumber &&
+        booking.checkIn &&
+        booking.checkOut &&
+        typeof booking.totalAmount === "number" &&
+        (!booking.status ||
+          ["confirmed", "pending", "cancelled"].includes(booking.status));
+
+      console.log(`Booking ${index + 1}:`, {
+        isValid,
+        missingFields: {
+          fullName: !booking.fullName && !booking.name,
+          email: !booking.email,
+          phone: !booking.phone,
+          roomNumber: !booking.roomNumber,
+          checkIn: !booking.checkIn,
+          checkOut: !booking.checkOut,
+          status:
+            booking.status &&
+            !["confirmed", "pending", "cancelled"].includes(booking.status),
+          totalAmount: typeof booking.totalAmount !== "number",
+        },
+      });
+    });
+  };
+
+  // Run validation on component mount
+  useEffect(() => {
+    validateBookingData();
+  }, []);
 
   // Calculate stats
   const totalBookings = bookings.length;
@@ -265,8 +318,9 @@ export function OwnerDashboard() {
     });
   };
 
-  const handleViewRoomDetails = () => {
-    router.push("/owner/rooms"); // Change to your actual route
+  const handleViewRoomDetails = (room) => {
+    setCurrentRoom(room);
+    setIsRoomDetailsOpen(true);
   };
 
   // Handle remove room
@@ -281,11 +335,38 @@ export function OwnerDashboard() {
     }
   };
 
+  // View booking details
+  const handleViewBookingDetails = (booking) => {
+    setCurrentBooking(booking);
+    setIsBookingDetailsOpen(true);
+  };
+
+  // Test function to add a properly structured booking
+  const addTestBooking = () => {
+    const newBooking = {
+      fullName: "Test User",
+      email: "test@example.com",
+      phone: "1234567890",
+      roomNumber: "101",
+      checkIn: new Date().toISOString(),
+      checkOut: new Date(Date.now() + 86400000).toISOString(),
+      nights: 1,
+      status: "pending",
+      totalAmount: 100,
+      bookingDate: new Date().toISOString(),
+    };
+
+    const bookings = JSON.parse(localStorage.getItem("bookings") || "[]");
+    bookings.push(newBooking);
+    localStorage.setItem("bookings", JSON.stringify(bookings));
+    console.log("Test booking added:", newBooking);
+  };
+
   return (
     <div className="space-y-6">
       {/* Back Button */}
       <button
-        className="mb-2 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+        className="mx-4 mb-2 px-5 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
         onClick={() => router.back()}
       >
         ← Back
@@ -424,36 +505,62 @@ export function OwnerDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {bookings
-                .slice(-4)
-                .reverse()
-                .map((booking, i) => (
+              {bookings.length > 0 ? (
+                bookings.slice(0, 4).map((booking, i) => (
                   <div
                     key={i}
                     className="flex items-center justify-between py-2 border-b last:border-0"
                   >
-                    <div>
-                      <p className="font-medium">
-                        {booking.guestName || booking.guest || "Unknown Guest"}
-                      </p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">
+                          {booking.fullName || booking.name || "Guest"}
+                        </p>
+                        <span
+                          className={`px-2 py-0.5 text-xs rounded-full ${
+                            booking.status === "confirmed"
+                              ? "bg-green-100 text-green-700"
+                              : booking.status === "pending"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {booking.status || "pending"}
+                        </span>
+                      </div>
                       <p className="text-sm text-gray-500">
-                        {booking.roomType || booking.room} • {booking.checkin} -{" "}
-                        {booking.checkout}
+                        Room {booking.roomNumber} • {booking.nights || 1}{" "}
+                        night(s)
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(booking.checkIn).toLocaleDateString()} -{" "}
+                        {new Date(booking.checkOut).toLocaleDateString()}
                       </p>
                     </div>
-                    <span className="font-semibold">
-                      ${booking.amount || booking.price || "N/A"}
-                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewBookingDetails(booking)}
+                    >
+                      View Details
+                    </Button>
                   </div>
-                ))}
+                ))
+              ) : (
+                <p className="text-center text-gray-500 py-4">
+                  No bookings found
+                </p>
+              )}
             </div>
-            <Button
-              variant="outline"
-              className="w-full mt-4 bg-transparent"
-              onClick={() => router.push("/user/bookings")}
-            >
-              View All Bookings
-            </Button>
+            {bookings.length > 0 && (
+              <Button
+                variant="outline"
+                className="w-full mt-4"
+                onClick={() => router.push("/admin/bookings")}
+              >
+                View All Bookings
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -530,7 +637,7 @@ export function OwnerDashboard() {
               <Calendar className="h-6 w-6 mb-2" />
               <span>Room Management</span>
             </Button>
-            <Button
+            {/* <Button
               variant="outline"
               className="h-auto flex flex-col items-center py-4 px-2 bg-transparent"
             >
@@ -543,7 +650,7 @@ export function OwnerDashboard() {
             >
               <BarChart2 className="h-6 w-6 mb-2" />
               <span>View Reports</span>
-            </Button>
+            </Button> */}
           </div>
         </CardContent>
       </Card>
@@ -802,6 +909,14 @@ export function OwnerDashboard() {
                       Edit
                     </Button>
                     <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewRoomDetails(room)}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View Room Detail
+                    </Button>
+                    <Button
                       variant="destructive"
                       size="sm"
                       onClick={() => handleRemoveRoom(room.id)}
@@ -824,6 +939,173 @@ export function OwnerDashboard() {
         title="Edit Room"
         initialData={currentRoom}
       />
+
+      <Dialog open={isRoomDetailsOpen} onOpenChange={setIsRoomDetailsOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Room Details</DialogTitle>
+          </DialogHeader>
+          {currentRoom && (
+            <div className="grid gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Room Number</Label>
+                  <p className="mt-1">{currentRoom.number}</p>
+                </div>
+                <div>
+                  <Label>Type</Label>
+                  <p className="mt-1 capitalize">{currentRoom.type}</p>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <p className="mt-1 capitalize">{currentRoom.status}</p>
+                </div>
+                <div>
+                  <Label>Floor</Label>
+                  <p className="mt-1">{currentRoom.floor}</p>
+                </div>
+                <div>
+                  <Label>Price</Label>
+                  <p className="mt-1">${currentRoom.price}/night</p>
+                </div>
+                <div>
+                  <Label>Capacity</Label>
+                  <p className="mt-1">{currentRoom.capacity} persons</p>
+                </div>
+              </div>
+
+              <div>
+                <Label>Description</Label>
+                <p className="mt-1">{currentRoom.description}</p>
+              </div>
+
+              {currentRoom.services && currentRoom.services.length > 0 && (
+                <div>
+                  <Label>Services</Label>
+                  <p className="mt-1">
+                    {Array.isArray(currentRoom.services)
+                      ? currentRoom.services.join(", ")
+                      : currentRoom.services}
+                  </p>
+                </div>
+              )}
+
+              {currentRoom.amenities && currentRoom.amenities.length > 0 && (
+                <div>
+                  <Label>Amenities</Label>
+                  <p className="mt-1">
+                    {Array.isArray(currentRoom.amenities)
+                      ? currentRoom.amenities.join(", ")
+                      : currentRoom.amenities}
+                  </p>
+                </div>
+              )}
+
+              {currentRoom.photo && (
+                <div>
+                  <Label>Room Photo</Label>
+                  <img
+                    src={currentRoom.photo}
+                    alt={`Room ${currentRoom.number}`}
+                    className="mt-2 rounded-md w-full max-h-60 object-cover"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsRoomDetailsOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isBookingDetailsOpen}
+        onOpenChange={setIsBookingDetailsOpen}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Booking Details</DialogTitle>
+          </DialogHeader>
+          {currentBooking && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-semibold">Status</h3>
+                <span
+                  className={`px-2 py-1 text-sm rounded-full ${
+                    currentBooking.status === "confirmed"
+                      ? "bg-green-100 text-green-700"
+                      : currentBooking.status === "pending"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {currentBooking.status || "pending"}
+                </span>
+              </div>
+
+              <div className="grid gap-3">
+                <div>
+                  <Label>Guest Information</Label>
+                  <p className="font-medium">
+                    {currentBooking.fullName || currentBooking.name}
+                  </p>
+                  <p className="text-sm">Email: {currentBooking.email}</p>
+                  <p className="text-sm">Phone: {currentBooking.phone}</p>
+                </div>
+
+                <div>
+                  <Label>Booking Details</Label>
+                  <p className="text-sm">
+                    Room Number: {currentBooking.roomNumber}
+                  </p>
+                  <p className="text-sm">
+                    Number of Nights: {currentBooking.nights || 1}
+                  </p>
+                  <p className="text-sm">
+                    Check-in:{" "}
+                    {new Date(currentBooking.checkIn).toLocaleDateString()}
+                  </p>
+                  <p className="text-sm">
+                    Check-out:{" "}
+                    {new Date(currentBooking.checkOut).toLocaleDateString()}
+                  </p>
+                </div>
+
+                <div>
+                  <Label>Payment Information</Label>
+                  <p className="font-semibold">
+                    Total Amount: ${currentBooking.totalAmount}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Booked on:{" "}
+                    {new Date(
+                      currentBooking.bookingDate || currentBooking.date
+                    ).toLocaleDateString()}
+                  </p>
+                </div>
+
+                {currentBooking.specialRequests && (
+                  <div>
+                    <Label>Special Requests</Label>
+                    <p className="text-sm">{currentBooking.specialRequests}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsBookingDetailsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Test Booking Button - For Development Only */}
+      {/* <div className="fixed bottom-4 right-4">
+        <Button onClick={addTestBooking}>Add Test Booking</Button>
+      </div> */}
     </div>
   );
 }

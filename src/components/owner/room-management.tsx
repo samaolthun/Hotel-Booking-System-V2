@@ -1,5 +1,5 @@
 "use client";
-
+const [isRoomDetailsOpen, setIsRoomDetailsOpen] = useState(false);
 import type React from "react";
 
 import { useState, useEffect } from "react";
@@ -12,6 +12,7 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
@@ -39,6 +40,7 @@ import {
 } from "@/src/components/ui/select";
 import { Textarea } from "@/src/components/ui/textarea";
 import { useToast } from "@/src/hooks/use-toast";
+import { RoomFormDialog } from "./room-form-dialog";
 
 // Add type for room and booking
 interface Room {
@@ -73,116 +75,11 @@ interface Booking {
   roomId?: number;
 }
 
-// Sample room data
-const initialRooms: Room[] = [
-  {
-    id: 1,
-    number: "101",
-    type: "single",
-    status: "available",
-    floor: "1",
-    hotelName: "Sokha Angkor Resort (Siem Reap)",
-    location: "Siem Reap",
-    mapEmbed: "",
-    price: 75,
-    capacity: 1,
-    description: "Cozy single room with city view",
-    services: [],
-    amenities: [],
-    photo: "",
-    lastUpdated: "2024-12-10",
-  },
-  {
-    id: 2,
-    number: "102",
-    type: "double",
-    status: "occupied",
-    floor: "1",
-    hotelName: "Sokha Angkor Resort (Siem Reap)",
-    location: "Siem Reap",
-    mapEmbed: "",
-    price: 95,
-    capacity: 2,
-    description: "Spacious double room with balcony",
-    services: [],
-    amenities: [],
-    photo: "",
-    lastUpdated: "2024-12-09",
-  },
-  {
-    id: 3,
-    number: "103",
-    type: "suite",
-    status: "available",
-    floor: "1",
-    hotelName: "Sokha Angkor Resort (Siem Reap)",
-    location: "Siem Reap",
-    mapEmbed: "",
-    price: 150,
-    capacity: 4,
-    description: "Luxury suite with ocean view",
-    services: [],
-    amenities: [],
-    photo: "",
-    lastUpdated: "2024-12-10",
-  },
-  {
-    id: 4,
-    number: "104",
-    type: "single",
-    status: "maintenance",
-    floor: "1",
-    hotelName: "Sokha Angkor Resort (Siem Reap)",
-    location: "Siem Reap",
-    mapEmbed: "",
-    price: 75,
-    capacity: 1,
-    description: "Single room under maintenance",
-    services: [],
-    amenities: [],
-    photo: "",
-    lastUpdated: "2024-12-08",
-  },
-  {
-    id: 5,
-    number: "201",
-    type: "double",
-    status: "available",
-    floor: "2",
-    hotelName: "Sokha Angkor Resort (Siem Reap)",
-    location: "Siem Reap",
-    mapEmbed: "",
-    price: 95,
-    capacity: 2,
-    description: "Modern double room",
-    services: [],
-    amenities: [],
-    photo: "",
-    lastUpdated: "2024-12-10",
-  },
-  {
-    id: 6,
-    number: "202",
-    type: "deluxe",
-    status: "occupied",
-    floor: "2",
-    hotelName: "Sokha Angkor Resort (Siem Reap)",
-    location: "Siem Reap",
-    mapEmbed: "",
-    price: 120,
-    capacity: 3,
-    description: "Deluxe room with premium amenities",
-    services: [],
-    amenities: [],
-    photo: "",
-    lastUpdated: "2024-12-09",
-  },
-];
-
 export function RoomManagement() {
   const [rooms, setRooms] = useState<Room[]>(() => {
+    // Get rooms only from localStorage, without fallback to sample data
     const stored = localStorage.getItem("ownerRooms");
-    return stored ? JSON.parse(stored) : initialRooms;
+    return stored ? JSON.parse(stored) : [];
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
@@ -198,6 +95,7 @@ export function RoomManagement() {
     price: "",
     rating: "",
   });
+  const [isRoomDetailsOpen, setIsRoomDetailsOpen] = useState(false);
 
   // Stats calculation
   const totalRooms = rooms.length;
@@ -220,14 +118,32 @@ export function RoomManagement() {
   );
 
   const handleAddRoom = (formData: any) => {
-    // Add to localStorage (already handled in RoomFormDialog)
-    // Refresh rooms from localStorage
-    const updatedRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
-    setRooms(updatedRooms);
+    // Create new room with unique ID and timestamp
+    const newRoom = {
+      ...formData,
+      id: Date.now(), // Ensure unique ID
+      lastUpdated: new Date().toISOString().split("T")[0],
+    };
+
+    // Get existing rooms from both storages
+    const ownerRooms = JSON.parse(localStorage.getItem("ownerRooms") || "[]");
+    const userRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
+
+    // Add new room to both arrays
+    const updatedOwnerRooms = [...ownerRooms, newRoom];
+    const updatedUserRooms = [...userRooms, newRoom];
+
+    // Save to both localStorage items
+    localStorage.setItem("ownerRooms", JSON.stringify(updatedOwnerRooms));
+    localStorage.setItem("userRooms", JSON.stringify(updatedUserRooms));
+
+    // Update state with owner rooms
+    setRooms(updatedOwnerRooms);
     setIsAddRoomOpen(false);
+
     toast({
       title: "Room Added",
-      description: "Room has been added successfully.",
+      description: `Room ${formData.number} has been added successfully.`,
     });
   };
 
@@ -236,27 +152,24 @@ export function RoomManagement() {
     const updatedRoom = {
       ...currentRoom,
       ...formData,
+      id: currentRoom.id, // Ensure we keep the original ID
       lastUpdated: new Date().toISOString().split("T")[0],
     };
 
-    // Update both ownerRooms and userRooms in localStorage
-    const ownerRooms = JSON.parse(localStorage.getItem("ownerRooms") || "[]");
-    const userRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
-
-    const updatedOwnerRooms = ownerRooms.map((room: Room) =>
-      room.id === currentRoom.id ? updatedRoom : room
-    );
-    const updatedUserRooms = userRooms.map((room: Room) =>
+    // Update rooms state
+    const updatedRooms = rooms.map((room: Room) =>
       room.id === currentRoom.id ? updatedRoom : room
     );
 
-    // Save back to localStorage
-    localStorage.setItem("ownerRooms", JSON.stringify(updatedOwnerRooms));
-    localStorage.setItem("userRooms", JSON.stringify(updatedUserRooms));
+    // Save to localStorage
+    localStorage.setItem("ownerRooms", JSON.stringify(updatedRooms));
+    localStorage.setItem("userRooms", JSON.stringify(updatedRooms));
 
     // Update state
-    setRooms(updatedOwnerRooms);
+    setRooms(updatedRooms);
     setIsEditRoomOpen(false);
+    setCurrentRoom(null); // Clear current room
+
     toast({
       title: "Room Updated",
       description: `Room ${formData.number} has been updated successfully.`,
@@ -483,7 +396,14 @@ export function RoomManagement() {
                           variant="ghost"
                           size="icon"
                           onClick={() => {
-                            setCurrentRoom(room);
+                            // Ensure all required fields are included when setting currentRoom
+                            const roomToEdit = {
+                              ...room,
+                              services: Array.isArray(room.services)
+                                ? room.services.join(", ")
+                                : room.services || "",
+                            };
+                            setCurrentRoom(roomToEdit);
                             setIsEditRoomOpen(true);
                           }}
                         >
@@ -495,6 +415,16 @@ export function RoomManagement() {
                           onClick={() => handleDeleteRoom(room.id)}
                         >
                           <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setCurrentRoom(room);
+                            setIsRoomDetailsOpen(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
                         </Button>
                       </div>
                     </td>
@@ -696,254 +626,83 @@ export function RoomManagement() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
 
-interface RoomFormDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (data: any) => void;
-  title: string;
-  initialData?: any;
-}
+      {/* Room Details Dialog */}
+      <Dialog open={isRoomDetailsOpen} onOpenChange={setIsRoomDetailsOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Room Details</DialogTitle>
+          </DialogHeader>
+          {currentRoom && (
+            <div className="grid gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Room Number</Label>
+                  <p className="mt-1">{currentRoom.number}</p>
+                </div>
+                <div>
+                  <Label>Type</Label>
+                  <p className="mt-1">{currentRoom.type}</p>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <p className="mt-1">{currentRoom.status}</p>
+                </div>
+                <div>
+                  <Label>Floor</Label>
+                  <p className="mt-1">{currentRoom.floor}</p>
+                </div>
+                <div>
+                  <Label>Price</Label>
+                  <p className="mt-1">${currentRoom.price}</p>
+                </div>
+                <div>
+                  <Label>Capacity</Label>
+                  <p className="mt-1">{currentRoom.capacity} persons</p>
+                </div>
+              </div>
 
-function RoomFormDialog({
-  isOpen,
-  onClose,
-  onSubmit,
-  title,
-  initialData,
-}: RoomFormDialogProps) {
-  const [formData, setFormData] = useState({
-    number: "",
-    type: "single",
-    status: "available",
-    hotelName: "",
-    location: "",
-    mapEmbed: "",
-    price: 75,
-    capacity: 1,
-    description: "",
-    services: "",
-    photo: "",
-  });
+              <div>
+                <Label>Hotel Name</Label>
+                <p className="mt-1">{currentRoom.hotelName}</p>
+              </div>
 
-  // Update form data when initialData changes
-  useEffect(() => {
-    if (initialData) {
-      setFormData({
-        number: initialData.number || "",
-        type: initialData.type || "single",
-        status: initialData.status || "available",
-        hotelName: initialData.hotelName || "",
-        location: initialData.location || "",
-        mapEmbed: initialData.mapEmbed || "",
-        price: initialData.price || 75,
-        capacity: initialData.capacity || 1,
-        description: initialData.description || "",
-        services: Array.isArray(initialData.services)
-          ? initialData.services.join(", ")
-          : initialData.services || "",
-        photo: initialData.photo || "",
-      });
-    }
-  }, [initialData]);
+              <div>
+                <Label>Location</Label>
+                <p className="mt-1">{currentRoom.location}</p>
+              </div>
 
-  const handleChange = (field: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
+              <div>
+                <Label>Description</Label>
+                <p className="mt-1">{currentRoom.description}</p>
+              </div>
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, photo: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+              <div>
+                <Label>Services</Label>
+                <p className="mt-1">
+                  {Array.isArray(currentRoom.services)
+                    ? currentRoom.services.join(", ")
+                    : currentRoom.services}
+                </p>
+              </div>
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const processedFormData = {
-      ...formData,
-      services: formData.services
-        .split(",")
-        .map((s: string) => s.trim())
-        .filter(Boolean),
-    };
-
-    if (initialData) {
-      // Edit existing room
-      onSubmit(processedFormData);
-    } else {
-      // Add new room
-      const newRoom = {
-        id: Date.now(),
-        ...processedFormData,
-        lastUpdated: new Date().toISOString().split("T")[0],
-      };
-      onSubmit(newRoom);
-    }
-
-    onClose();
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="roomNumber">Room Number</Label>
-              <Input
-                id="roomNumber"
-                value={formData.number}
-                onChange={(e) => handleChange("number", e.target.value)}
-                required
-              />
+              {currentRoom.photo && (
+                <div>
+                  <Label>Room Photo</Label>
+                  <img
+                    src={currentRoom.photo}
+                    alt={`Room ${currentRoom.number}`}
+                    className="mt-2 rounded-md w-full max-h-60 object-cover"
+                  />
+                </div>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="roomType">Room Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value) => handleChange("type", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="single">Single</SelectItem>
-                  <SelectItem value="double">Double</SelectItem>
-                  <SelectItem value="suite">Suite</SelectItem>
-                  <SelectItem value="deluxe">Deluxe</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="roomStatus">Room Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => handleChange("status", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="available">Available</SelectItem>
-                  <SelectItem value="occupied">Occupied</SelectItem>
-                  <SelectItem value="maintenance">Maintenance</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="hotelName">Hotel Name</Label>
-            <Input
-              id="hotelName"
-              value={formData.hotelName}
-              onChange={(e) => handleChange("hotelName", e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="location">Location</Label>
-            <Input
-              id="location"
-              value={formData.location}
-              onChange={(e) => handleChange("location", e.target.value)}
-              placeholder="e.g. Downtown, Beachfront, City Center"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="mapEmbed">
-              Location Map (Google Maps Embed URL)
-            </Label>
-            <Input
-              id="mapEmbed"
-              value={formData.mapEmbed}
-              onChange={(e) => handleChange("mapEmbed", e.target.value)}
-              placeholder="https://www.google.com/maps/embed?pb=..."
-              required
-            />
-            <p className="text-xs text-gray-500">
-              To get the embed URL: 1) Go to Google Maps, 2) Search for your
-              location, 3) Click "Share", 4) Select "Embed a map", 5) Copy the
-              URL
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="roomPrice">Price per Night</Label>
-              <Input
-                id="roomPrice"
-                type="number"
-                value={formData.price}
-                onChange={(e) => handleChange("price", Number(e.target.value))}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="roomCapacity">Capacity</Label>
-              <Input
-                id="roomCapacity"
-                type="number"
-                value={formData.capacity}
-                onChange={(e) =>
-                  handleChange("capacity", Number(e.target.value))
-                }
-                required
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="roomDescription">Description</Label>
-            <Textarea
-              id="roomDescription"
-              value={formData.description}
-              onChange={(e) => handleChange("description", e.target.value)}
-              placeholder="Room description and amenities..."
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="roomServices">Services (comma separated)</Label>
-            <Textarea
-              id="roomServices"
-              value={formData.services}
-              onChange={(e) => handleChange("services", e.target.value)}
-              placeholder="e.g. Pool, Free WiFi, Breakfast"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="roomPhoto">Hotel Photo</Label>
-            <Input
-              id="roomPhoto"
-              type="file"
-              accept="image/*"
-              onChange={handlePhotoChange}
-            />
-            {formData.photo && (
-              <img
-                src={formData.photo}
-                alt="Preview"
-                className="mt-2 rounded w-32 h-24 object-cover border"
-              />
-            )}
-          </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" type="button" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit">{initialData ? "Update" : "Add"} Room</Button>
+            <Button onClick={() => setIsRoomDetailsOpen(false)}>Close</Button>
           </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

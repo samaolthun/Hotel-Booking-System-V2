@@ -23,14 +23,14 @@ export function Navbar() {
         </button>
         {open && (
           <div className="absolute right-0 mt-2 w-40 bg-white text-black rounded shadow-lg z-10">
-            <Link href="/profile" legacyBehavior>
+            <Link href="/profile">
               <a className="block px-4 py-2 hover:bg-gray-100 cursor-pointer">
                 Profile
               </a>
             </Link>
-            <Link href="/setting" legacyBehavior>
+            <Link href="/settings">
               <a className="block px-4 py-2 hover:bg-gray-100 cursor-pointer">
-                Setting
+                Settings
               </a>
             </Link>
             <button

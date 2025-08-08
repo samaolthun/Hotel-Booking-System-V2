@@ -1,8 +1,8 @@
 "use client";
 
-import { useAuth } from "@/src/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth";
 import { useEffect } from "react";
-import { OwnerDashboard } from "@/src/components/owner/owner-dashboard";
+import { OwnerDashboard } from "@/components/owner/owner-dashboard";
 
 export default function AdminDashboardPage() {
   const { user, loading } = useAuth();
