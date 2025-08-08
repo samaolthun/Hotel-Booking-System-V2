@@ -8,30 +8,37 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/src/components/ui/dialog";
-import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/src/components/ui/select";
-import { Alert, AlertDescription } from "@/src/components/ui/alert";
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
-import { useAuth } from "@/src/hooks/use-auth";
-import { useToast } from "@/src/hooks/use-toast";
-import { isRoomAvailable } from "@/src/lib/utils/booking-utils";
-import type { Hotel } from "@/src/lib/types";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { isRoomAvailable } from "@/lib/utils";
+import type { Hotel } from "@/lib/types";
 
 interface BookingModalProps {
   isOpen: boolean;
   onClose: () => void;
   hotel: Hotel;
+  roomType: keyof Hotel["rooms"];
 }
 
-export function BookingModal({ isOpen, onClose, hotel }: BookingModalProps) {
+export function BookingModal({
+  isOpen,
+  onClose,
+  hotel,
+  roomType,
+}: BookingModalProps) {
   const today = new Date().toISOString().split("T")[0];
   const [checkin, setCheckin] = useState(today);
   const [checkout, setCheckout] = useState(today);
@@ -39,7 +46,6 @@ export function BookingModal({ isOpen, onClose, hotel }: BookingModalProps) {
   const [adults, setAdults] = useState("1");
   const [children, setChildren] = useState("0");
   const [paymentPercent, setPaymentPercent] = useState("50");
-  const [roomType, setRoomType] = useState<keyof Hotel["rooms"]>("standard");
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -179,6 +185,58 @@ export function BookingModal({ isOpen, onClose, hotel }: BookingModalProps) {
   const prePaymentAmount = bookingDetails
     ? ((Number(paymentPercent) / 100) * bookingDetails.totalPrice).toFixed(2)
     : "0.00";
+
+  // Add type checking for room
+  const room = hotel?.rooms?.[roomType];
+
+  useEffect(() => {
+    if (!hotel || !roomType || !checkin || !checkout) return;
+
+    const room = hotel.rooms[roomType];
+    if (!room) return;
+
+    // Set initial availability based on room status
+    if (room.status !== "available") {
+      setIsAvailable(false);
+      return;
+    }
+
+    // Check booking availability
+    const available = isRoomAvailable(
+      hotel.id,
+      room.number,
+      new Date(checkin),
+      new Date(checkout)
+    );
+
+    setIsAvailable(available);
+
+    // Log for debugging
+    console.log("Checking availability:", {
+      hotelId: hotel.id,
+      roomNumber: room.number,
+      checkIn: checkin,
+      checkOut: checkout,
+      isAvailable: available,
+    });
+  }, [hotel, roomType, checkin, checkout]);
+
+  // Add error handling for when room data is missing
+  if (!room) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Error</DialogTitle>
+            <DialogDescription>
+              Room information not found. Please try again.
+            </DialogDescription>
+          </DialogHeader>
+          <Button onClick={onClose}>Close</Button>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (!isOpen) return null;
 

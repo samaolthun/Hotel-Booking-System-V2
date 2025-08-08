@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { useAuth } from "@/src/hooks/use-auth";
-import type { Booking } from "@/src/lib/types";
+import { useAuth } from "@/hooks/use-auth";
+import type { Booking } from "@/lib/types";
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -14,9 +14,9 @@ import {
   AlertDialogDescription,
   AlertDialogAction,
   AlertDialogCancel,
-} from "@/src/components/ui/alert-dialog";
-import { Button } from "@/src/components/ui/button";
-import { useToast } from "@/src/hooks/use-toast";
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 export function MyBookings() {
   const { user } = useAuth();

@@ -3,14 +3,14 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Search, Calendar, Users, Filter } from "lucide-react"
-import { Button } from "@/src/components/ui/button"
-import { Input } from "@/src/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/src/components/ui/popover"
-import { Slider } from "@/src/components/ui/slider"
-import { Badge } from "@/src/components/ui/badge"
-import { Checkbox } from "@/src/components/ui/checkbox"
-import { Label } from "@/src/components/ui/label"
-import { DatePicker } from "@/src/components/ui/date-picker"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Slider } from "@/components/ui/slider"
+import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+import { DatePicker } from "@/components/ui/date-picker"
 
 export function SearchBar() {
   const router = useRouter()

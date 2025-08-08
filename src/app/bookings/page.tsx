@@ -1,6 +1,6 @@
-import { Header } from "@/src/components/layout/header";
-import { Footer } from "@/src/components/layout/footer";
-import { MyBookings } from "@/src/components/bookings/my-bookings";
+import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/layout/footer";
+import { MyBookings } from "@/components/bookings/my-bookings";
 
 export default function BookingsPage() {
   return (

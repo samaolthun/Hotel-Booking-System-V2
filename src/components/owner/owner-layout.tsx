@@ -17,14 +17,14 @@ import {
   User,
   Bell,
 } from "lucide-react";
-import { Button } from "@/src/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Avatar,
   AvatarFallback,
   AvatarImage,
-} from "@/src/components/ui/avatar";
-import { useAuth } from "@/src/hooks/use-auth";
-import { useToast } from "@/src/hooks/use-toast";
+} from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 
 interface OwnerLayoutProps {
   children: React.ReactNode;

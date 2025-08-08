@@ -56,12 +56,11 @@ export interface Booking {
 }
 
 export interface Room {
-  id: number;
   number: string;
-  type: "single" | "double" | "suite" | "deluxe";
-  status: "available" | "occupied" | "maintenance";
+  name: string;
+  type: string;
   price: number;
   capacity: number;
-  lastUpdated: string;
-  description: string;
+  status: "available" | "occupied" | "maintenance";
+  // ...other properties
 }

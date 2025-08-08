@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { HotelDetails } from "@/src/components/hotels/hotel-details";
-import type { Hotel } from "@/src/lib/types";
+import { HotelDetails } from "@/components/hotels/hotel-details";
+import type { Hotel } from "@/lib/types";
 import { notFound } from "next/navigation";
 
 interface HotelPageClientProps {

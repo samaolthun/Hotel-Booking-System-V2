@@ -1,4 +1,4 @@
-import type { Booking } from "@/src/lib/types";
+import type { Booking } from "@/lib/types";
 
 export function isRoomAvailable(
   hotelId: number,

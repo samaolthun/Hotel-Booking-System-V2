@@ -1,9 +1,9 @@
-import { Header } from "@/src/components/layout/header";
-import { Footer } from "@/src/components/layout/footer";
-import { HotelDetails } from "@/src/components/hotels/hotel-details";
-import { getHotelById } from "@/src/lib/data/hotels";
+import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/layout/footer";
+import { HotelDetails } from "@/components/hotels/hotel-details";
+import { getHotelById } from "@/lib/data/hotels";
 import { notFound } from "next/navigation";
-import { HotelPageClient } from "@/src/components/hotels/hotel-page-client";
+import { HotelPageClient } from "@/components/hotels/hotel-page-client";
 
 interface HotelPageProps {
   params: {

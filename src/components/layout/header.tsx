@@ -11,22 +11,22 @@ import {
   LogOut,
   Settings,
 } from "lucide-react";
-import { Button } from "@/src/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/src/components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 import {
   Avatar,
   AvatarFallback,
   AvatarImage,
-} from "@/src/components/ui/avatar";
-import { AuthModal } from "@/src/components/auth/auth-modal";
-import { ThemeToggle } from "@/src/components/ui/theme-toggle";
-import { useAuth } from "@/src/hooks/use-auth";
+} from "@/components/ui/avatar";
+import { AuthModal } from "@/components/auth/auth-modal";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useAuth } from "@/hooks/use-auth";
 
 export function Header() {
   const [showAuthModal, setShowAuthModal] = useState(false);

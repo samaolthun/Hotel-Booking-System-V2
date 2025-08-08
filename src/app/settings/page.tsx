@@ -5,10 +5,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/src/components/ui/card";
-import { Label } from "@/src/components/ui/label";
-import { Switch } from "@/src/components/ui/switch";
-import { ThemeToggle } from "@/src/components/ui/theme-toggle";
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function Settings() {
   return (

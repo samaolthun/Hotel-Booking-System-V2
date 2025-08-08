@@ -1,8 +1,8 @@
 "use client"
 
-import { HotelCard } from "@/src/components/hotels/hotel-card"
-import { useFavorites } from "@/src/hooks/use-favorites"
-import { getHotelById } from "@/src/lib/data/hotels"
+import { HotelCard } from "@/components/hotels/hotel-card"
+import { useFavorites } from "@/hooks/use-favorites"
+import { getHotelById } from "@/lib/data/hotels"
 
 export function FavoriteHotels() {
   const { favorites } = useFavorites()

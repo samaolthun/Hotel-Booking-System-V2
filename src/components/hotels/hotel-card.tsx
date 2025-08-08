@@ -4,10 +4,10 @@ import type React from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Heart, Star, MapPin } from "lucide-react"
-import { Button } from "@/src/components/ui/button"
-import { Badge } from "@/src/components/ui/badge"
-import { useFavorites } from "@/src/hooks/use-favorites"
-import type { Hotel } from "@/src/lib/types"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { useFavorites } from "@/hooks/use-favorites"
+import type { Hotel } from "@/lib/types"
 
 interface HotelCardProps {
   hotel: Hotel

@@ -2,18 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { Star } from "lucide-react";
-import { Textarea } from "@/src/components/ui/textarea";
-import { Button } from "@/src/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/src/components/ui/select";
-import { useAuth } from "@/src/hooks/use-auth";
-import { useToast } from "@/src/hooks/use-toast";
-import type { Hotel, Review, Booking } from "@/src/lib/types";
+} from "@/components/ui/select";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import type { Hotel, Review, Booking } from "@/lib/types";
 
 interface ReviewSectionProps {
   hotel: Hotel;

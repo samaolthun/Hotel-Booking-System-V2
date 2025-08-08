@@ -4,13 +4,13 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Star } from "lucide-react";
-import { Button } from "@/src/components/ui/button";
-import { Badge } from "@/src/components/ui/badge";
-import { BookingModal } from "@/src/components/booking/booking-modal";
-import { ReviewSection } from "@/src/components/reviews/review-section";
-import { PromotionBanner } from "@/src/components/hotels/promotion-banner";
-import { HotelImageGallery } from "@/src/components/hotels/hotel-image-gallery";
-import type { Hotel, Review } from "@/src/lib/types";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { BookingModal } from "@/components/booking/booking-modal";
+import { ReviewSection } from "@/components/reviews/review-section";
+import { PromotionBanner } from "@/components/hotels/promotion-banner";
+import { HotelImageGallery } from "@/components/hotels/hotel-image-gallery";
+import type { Hotel, Review } from "@/lib/types";
 
 interface HotelDetailsProps {
   hotel: Hotel;
@@ -21,6 +21,7 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
   const [showGallery, setShowGallery] = useState(false);
   const [realRating, setRealRating] = useState(hotel.rating);
   const [realReviewCount, setRealReviewCount] = useState(hotel.reviews.length);
+  const [selectedRoomType, setSelectedRoomType] = useState<string | null>(null);
 
   // Use the hotel.images array directly
   const hotelImages =
@@ -177,7 +178,6 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
                     <span className="text-lg font-semibold text-primary">
                       ${room.price}
                     </span>
-                    
                   </div>
                 </div>
               ))}
@@ -185,7 +185,12 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
           </div>
 
           <Button
-            onClick={() => setShowBookingModal(true)}
+            onClick={() => {
+              // Show room selection or first available room
+              const firstRoomType = Object.keys(hotel.rooms)[0];
+              setSelectedRoomType(firstRoomType);
+              setShowBookingModal(true);
+            }}
             className="w-full bg-primary hover:bg-primary/90 text-lg font-semibold py-3"
           >
             Book Now
@@ -224,8 +229,12 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
 
       <BookingModal
         isOpen={showBookingModal}
-        onClose={() => setShowBookingModal(false)}
+        onClose={() => {
+          setShowBookingModal(false);
+          setSelectedRoomType(null);
+        }}
         hotel={hotel}
+        roomType={selectedRoomType}
       />
 
       {/* Image Gallery Modal */}

@@ -1,6 +1,6 @@
-import { Header } from "@/src/components/layout/header"
-import { Footer } from "@/src/components/layout/footer"
-import { FavoriteHotels } from "@/src/components/favorites/favorite-hotels"
+import { Header } from "@/components/layout/header"
+import { Footer } from "@/components/layout/footer"
+import { FavoriteHotels } from "@/components/favorites/favorite-hotels"
 
 export default function FavoritesPage() {
   return (

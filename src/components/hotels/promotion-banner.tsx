@@ -2,10 +2,10 @@
 
 import { useState } from "react"
 import { AlertCircle, X } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert"
-import { Button } from "@/src/components/ui/button"
-import { useToast } from "@/src/hooks/use-toast"
-import type { Hotel } from "@/src/lib/types"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { useToast } from "@/hooks/use-toast"
+import type { Hotel } from "@/lib/types"
 
 interface PromotionBannerProps {
   hotel: Hotel
