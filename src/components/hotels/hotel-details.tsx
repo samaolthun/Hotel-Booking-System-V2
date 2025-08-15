@@ -22,6 +22,10 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
   const [realRating, setRealRating] = useState(hotel.rating);
   const [realReviewCount, setRealReviewCount] = useState(hotel.reviews.length);
   const [selectedRoomType, setSelectedRoomType] = useState<string | null>(null);
+  const [canReview, setCanReview] = useState(false);
+  const [eligibleBookingId, setEligibleBookingId] = useState<
+    number | string | null
+  >(null);
 
   // Use the hotel.images array directly
   const hotelImages =
@@ -49,6 +53,134 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
   // choose roomType to show reviews for
   const defaultRoomType = Object.keys(hotel.rooms ?? {})[0] ?? "standard";
   const reviewRoomTypeToShow = selectedRoomType ?? defaultRoomType;
+
+  // Helper to get current user from localStorage (adjust if you use a different auth store)
+  const getCurrentUser = () => {
+    try {
+      const raw =
+        typeof window !== "undefined" ? localStorage.getItem("user") : null;
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    // recompute eligibility whenever selectedRoomType or hotel changes
+    const user = getCurrentUser();
+    if (!user) {
+      setCanReview(false);
+      setEligibleBookingId(null);
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem("bookings");
+      const bookings = raw ? JSON.parse(raw) : [];
+      const today = new Date();
+
+      // find a booking that:
+      // - belongs to current user
+      // - references this hotel (hotelId or hotel)
+      // - matches selectedRoomType (if set)
+      // - not already reviewed
+      // - and check-in date is on-or-before today (allow during stay and after)
+      const match = bookings.find((b: any) => {
+        const bUser = String(b.userId ?? b.user ?? "");
+        if (String(user.id) !== bUser) return false;
+
+        const bHotel = String(b.hotelId ?? b.hotel ?? "");
+        if (String(hotel.id) !== bHotel) return false;
+
+        if (
+          selectedRoomType &&
+          String(b.roomType ?? b.room ?? "") !== String(selectedRoomType)
+        )
+          return false;
+
+        if (b.reviewed) return false; // already reviewed for this booking
+
+        const ciRaw = b.checkinDate ?? b.startDate ?? b.from;
+        if (!ciRaw) return false;
+        const ci = new Date(ciRaw);
+        if (isNaN(ci.getTime())) return false;
+
+        // allow rating if today is on or after check-in (during stay or after)
+        return today >= ci;
+      });
+
+      if (match) {
+        setCanReview(true);
+        setEligibleBookingId(match.id ?? match.bookingId ?? null);
+      } else {
+        setCanReview(false);
+        setEligibleBookingId(null);
+      }
+    } catch {
+      setCanReview(false);
+      setEligibleBookingId(null);
+    }
+  }, [hotel.id, selectedRoomType]);
+
+  // Handler to persist a review and mark booking as reviewed
+  const handleSubmitReview = (payload: {
+    rating: number;
+    comment?: string;
+  }) => {
+    const user = getCurrentUser();
+    if (!user || !eligibleBookingId) return;
+
+    const reviewsKey = `reviews_${hotel.id}`;
+    const stored = localStorage.getItem(reviewsKey);
+    const reviews = stored ? JSON.parse(stored) : [];
+
+    // Prevent duplicate review for the booking
+    if (
+      reviews.some(
+        (r: any) => String(r.bookingId) === String(eligibleBookingId)
+      )
+    ) {
+      setCanReview(false);
+      return;
+    }
+
+    const newReview = {
+      id: Date.now(),
+      bookingId: eligibleBookingId,
+      roomType: selectedRoomType ?? null,
+      rating: Number(payload.rating),
+      comment: payload.comment ?? "",
+      userId: user.id,
+      createdAt: new Date().toISOString(),
+    };
+    reviews.push(newReview);
+    localStorage.setItem(reviewsKey, JSON.stringify(reviews));
+
+    // mark the booking as reviewed
+    try {
+      const raw = localStorage.getItem("bookings");
+      const bookings = raw ? JSON.parse(raw) : [];
+      const idx = bookings.findIndex(
+        (b: any) => String(b.id ?? b.bookingId) === String(eligibleBookingId)
+      );
+      if (idx >= 0) {
+        bookings[idx].reviewed = true;
+        localStorage.setItem("bookings", JSON.stringify(bookings));
+      }
+    } catch {}
+
+    // update local rating counts shown on page
+    const total = reviews.reduce(
+      (s: number, r: any) => s + Number(r.rating || 0),
+      0
+    );
+    const avg = reviews.length
+      ? Math.round((total / reviews.length) * 10) / 10
+      : hotel.rating ?? 0;
+    setRealRating(avg);
+    setRealReviewCount(reviews.length);
+    setCanReview(false);
+  };
 
   return (
     <>
@@ -230,7 +362,12 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
         )}
       </div>
 
-      <ReviewSection hotelId={hotel.id} roomType={reviewRoomTypeToShow} />
+      <ReviewSection
+        hotelId={hotel.id}
+        roomType={reviewRoomTypeToShow}
+        canReview={canReview}
+        onSubmitReview={handleSubmitReview}
+      />
 
       {selectedRoomType !== null && (
         <BookingModal

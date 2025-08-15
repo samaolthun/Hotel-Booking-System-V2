@@ -270,56 +270,141 @@ export function getHotelById(id: number): Hotel | undefined {
   return hotels.find((hotel) => hotel.id === id);
 }
 
-export function getRoomsByFilters(filters: {
+export type RoomFilter = {
   destination?: string;
   roomType?: string;
-  checkin?: string;
-  checkout?: string;
+  checkin?: string; // yyyy-mm-dd
+  checkout?: string; // yyyy-mm-dd
   beds?: string;
-  guests?: string;
-}) {
-  // Mock data for demonstration
-  const allRooms = [
-    {
-      id: 1,
-      name: "Deluxe Phnom Penh",
-      type: "deluxe",
-      beds: "2",
-      maxGuests: 4,
-      price: 120,
-      location: "Phnom Penh",
-    },
-    {
-      id: 2,
-      name: "Suite Siem Reap",
-      type: "suite",
-      beds: "3",
-      maxGuests: 6,
-      price: 200,
-      location: "Siem Reap",
-    },
-    {
-      id: 3,
-      name: "Standard Kep",
-      type: "standard",
-      beds: "1",
-      maxGuests: 2,
-      price: 80,
-      location: "Kep",
-    },
-    // Add more rooms as needed
-  ];
+  guests?: string | number;
+};
 
-  return allRooms.filter((room) => {
+function safeParseDate(d?: string | null) {
+  if (!d) return null;
+  // Accept YYYY-MM-DD or ISO strings
+  const parsed = new Date(d);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
+  return (
+    aStart.getTime() <= bEnd.getTime() && bStart.getTime() <= aEnd.getTime()
+  );
+}
+
+function readJSON<T>(key: string): T[] {
+  try {
+    const raw =
+      typeof window !== "undefined" ? localStorage.getItem(key) : null;
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getAllRooms(): any[] {
+  // Try multiple keys so we cover owner/user/global shapes
+  const keys = ["rooms", "userRooms", "ownerRooms"];
+  const seen = new Map<number | string, any>();
+  for (const k of keys) {
+    const arr = readJSON<any>(k);
+    for (const r of arr) {
+      const id = r?.id ?? `${r?.hotelId ?? r?.number ?? Math.random()}`;
+      if (!seen.has(id)) seen.set(id, r);
+    }
+  }
+  return Array.from(seen.values());
+}
+
+export function getAllBookings(): any[] {
+  return readJSON<any>("bookings");
+}
+
+/**
+ * Return rooms that match filters and are AVAILABLE in the date range.
+ */
+export function getRoomsByFilters(filters: RoomFilter = {}) {
+  const rooms = getAllRooms();
+  const bookings = getAllBookings();
+
+  const checkinDate = safeParseDate(filters.checkin);
+  const checkoutDate = safeParseDate(filters.checkout);
+
+  // If only one date provided, treat it as a single-night search (checkout = checkin)
+  let searchStart: Date | null = null;
+  let searchEnd: Date | null = null;
+  if (checkinDate && checkoutDate) {
+    searchStart = checkinDate;
+    searchEnd = checkoutDate;
+  } else if (checkinDate && !checkoutDate) {
+    searchStart = checkinDate;
+    searchEnd = new Date(checkinDate.getTime() + 1000 * 60 * 60 * 24); // +1 day
+  } else if (!checkinDate && checkoutDate) {
+    searchStart = checkoutDate;
+    searchEnd = new Date(checkoutDate.getTime() + 1000 * 60 * 60 * 24);
+  }
+
+  return rooms.filter((room: any) => {
+    // roomType
     if (
-      filters.destination &&
-      !room.location.toLowerCase().includes(filters.destination.toLowerCase())
-    )
+      filters.roomType &&
+      String(room.type ?? room.roomType ?? "").toLowerCase() !==
+        String(filters.roomType).toLowerCase()
+    ) {
       return false;
-    if (filters.roomType && room.type !== filters.roomType) return false;
-    if (filters.beds && room.beds !== filters.beds) return false;
-    if (filters.guests && room.maxGuests < Number(filters.guests)) return false;
-    // checkin/checkout not used in mock
+    }
+
+    // guests -> capacity
+    if (filters.guests) {
+      const needed = Number(filters.guests);
+      const cap = Number(room.capacity ?? room.maxGuests ?? room.guests ?? 0);
+      if (!isNaN(needed) && needed > cap) return false;
+    }
+
+    // destination (optional) - simple contains match
+    if (filters.destination) {
+      const dest = String(filters.destination).toLowerCase();
+      const roomLoc = String(
+        room.location ?? room.city ?? room.hotelName ?? ""
+      ).toLowerCase();
+      if (!roomLoc.includes(dest)) return false;
+    }
+
+    // availability check: if no date range requested, treat as available
+    if (!searchStart || !searchEnd) return true;
+
+    // find bookings that reference this room (try multiple shapes)
+    const roomId = room.id ?? room.roomId ?? room.number ?? room._id;
+    const relatedBookings = bookings.filter((b: any) => {
+      // booking may reference roomId, room, roomNumber, hotelId+roomNumber etc.
+      if (b.roomId && String(b.roomId) === String(roomId)) return true;
+      if (
+        b.room &&
+        ((b.room.id && String(b.room.id) === String(roomId)) ||
+          b.room === roomId)
+      )
+        return true;
+      if (b.roomNumber && String(b.roomNumber) === String(room.number))
+        return true;
+      // fallback: if booking contains rooms array
+      if (
+        Array.isArray(b.rooms) &&
+        b.rooms.some((r: any) => String(r?.id ?? r) === String(roomId))
+      )
+        return true;
+      return false;
+    });
+
+    // if any related booking overlaps requested range -> not available
+    for (const b of relatedBookings) {
+      const bStart = safeParseDate(b.checkinDate ?? b.startDate ?? b.from);
+      const bEnd = safeParseDate(b.checkoutDate ?? b.endDate ?? b.to);
+      if (!bStart || !bEnd) continue; // malformed booking -> ignore
+      if (rangesOverlap(searchStart, searchEnd, bStart, bEnd)) return false;
+    }
+
     return true;
   });
 }

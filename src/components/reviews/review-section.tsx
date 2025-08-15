@@ -1,231 +1,153 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import {
-  getReviewsForRoom,
-  saveReviewForRoom,
-  findEligibleBookingForUser,
-  StoredReview,
-} from "../../lib/reviewHelpers";
+import { Button } from "@/components/ui/button";
+import { Star } from "lucide-react";
 
-interface ReviewSectionProps { 
-  hotelId: number | string;
-  roomType: string;
+interface ReviewSectionProps {
+  hotelId: string | number;
+  roomType?: string | null;
+  canReview?: boolean;
+  onSubmitReview?: (payload: { rating: number; comment?: string }) => void;
 }
 
-export function ReviewSection({ hotelId, roomType }: ReviewSectionProps) {
-  const [reviews, setReviews] = useState<StoredReview[]>([]);
+export function ReviewSection({
+  hotelId,
+  roomType,
+  canReview = false,
+  onSubmitReview,
+}: ReviewSectionProps) {
+  const [reviews, setReviews] = useState<any[]>([]);
   const [rating, setRating] = useState<number>(5);
   const [comment, setComment] = useState("");
-  const [eligibleBooking, setEligibleBooking] = useState<any | null>(null);
-
-  // get current user from localStorage (adjust if you have auth)
-  const getCurrentUser = () => {
-    try {
-      const raw =
-        localStorage.getItem("user") || localStorage.getItem("currentUser");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  };
 
   useEffect(() => {
-    setReviews(getReviewsForRoom(hotelId, roomType));
-    const user = getCurrentUser();
-    const booking = findEligibleBookingForUser(
-      hotelId,
-      roomType,
-      user?.id ?? user?.userId ?? null
-    );
-    setEligibleBooking(booking);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    try {
+      const raw = localStorage.getItem(`reviews_${hotelId}`);
+      const parsed = raw ? JSON.parse(raw) : [];
+      const filtered = Array.isArray(parsed)
+        ? parsed.filter((r: any) =>
+            roomType ? String(r.roomType) === String(roomType) : true
+          )
+        : [];
+      setReviews(filtered);
+    } catch {
+      setReviews([]);
+    }
   }, [hotelId, roomType]);
 
-  const submitReview = () => {
-    const user = getCurrentUser();
-    if (!eligibleBooking) {
-      alert("You are not eligible to submit a review for this booking.");
-      return;
-    }
-    const review: StoredReview = {
+  const submit = () => {
+    // build review object with current user if available
+    const user = (() => {
+      try {
+        const raw = localStorage.getItem("user");
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const newReview = {
       id: Date.now(),
-      bookingId: eligibleBooking.id,
-      hotelId,
+      bookingId: null,
       roomType,
-      userId: user?.id ?? user?.userId ?? "anonymous",
-      userName: user?.name ?? user?.username ?? "Guest",
       rating,
       comment,
-      date: new Date().toISOString(),
+      userId: user?.id ?? null,
+      createdAt: new Date().toISOString(),
     };
-    saveReviewForRoom(hotelId, roomType, review);
-    setReviews((prev) => [review, ...prev]);
-    setEligibleBooking(null);
-    setComment("");
+
+    // persist to localStorage so reviews are visible to others later
+    try {
+      const key = `reviews_${hotelId}`;
+      const raw = localStorage.getItem(key);
+      const arr = raw && Array.isArray(JSON.parse(raw)) ? JSON.parse(raw) : [];
+      arr.unshift(newReview);
+      localStorage.setItem(key, JSON.stringify(arr));
+    } catch {
+      // ignore storage errors
+    }
+
+    // call optional external handler (HotelDetails may mark booking reviewed)
+    if (onSubmitReview) {
+      onSubmitReview({ rating, comment });
+    }
+
+    // optimistic UI update
+    setReviews((r) => [newReview, ...r]);
     setRating(5);
+    setComment("");
   };
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-xl font-semibold">Guest feedback for {roomType}</h3>
+    <section>
+      <h3 className="text-xl font-semibold mb-3">Reviews</h3>
 
-      {eligibleBooking ? (
-        <div className="p-4 border rounded space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Your rating</label>
+      {reviews.length === 0 ? (
+        <p className="text-sm text-muted-foreground mb-4">No reviews yet.</p>
+      ) : (
+        <div className="space-y-4 mb-6">
+          {reviews.map((r: any) => (
+            <div
+              key={r.id ?? `${r.userId}-${r.createdAt}`}
+              className="p-4 border rounded"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    className={
+                      i < Math.round(r.rating ?? 0)
+                        ? "text-yellow-400"
+                        : "text-muted-foreground"
+                    }
+                  />
+                ))}
+                <span className="ml-2 text-sm text-muted-foreground">
+                  {r.createdAt
+                    ? new Date(r.createdAt).toLocaleDateString()
+                    : ""}
+                </span>
+              </div>
+              {r.comment && <p className="text-sm">{r.comment}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {canReview ? (
+        <div className="p-4 border rounded">
+          <h4 className="font-medium mb-2">Leave a review</h4>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="text-sm mr-2">Rating:</label>
             <select
               value={rating}
               onChange={(e) => setRating(Number(e.target.value))}
-              className="ml-2"
+              className="border rounded px-2 py-1"
             >
-              {[5, 4, 3, 2, 1].map((r) => (
-                <option key={r} value={r}>
-                  {r}
+              {[5, 4, 3, 2, 1].map((n) => (
+                <option key={n} value={n}>
+                  {n} ★
                 </option>
               ))}
             </select>
           </div>
-
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Write your feedback..."
-            className="w-full p-2 border rounded"
+            placeholder="Write your feedback (optional)"
+            className="w-full border rounded p-2 mb-2"
           />
-
-          <div className="flex gap-2">
-            <button
-              className="px-3 py-1 bg-primary text-white rounded"
-              onClick={submitReview}
-            >
-              Submit review
-            </button>
-            <button
-              className="px-3 py-1 border rounded"
-              onClick={() => {
-                setComment("");
-                setRating(5);
-              }}
-            >
-              Clear
-            </button>
-          </div>
-
-          <div className="text-sm text-muted-foreground">
-            You can leave one review per booking. Reviews can be submitted at or
-            after check-in.
+          <div className="flex justify-end">
+            <Button onClick={submit}>Submit Review</Button>
           </div>
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">
-          Only guests who have a booking and are on/after check-in can leave
-          feedback.
-        </div>
+        <p className="text-sm text-muted-foreground">
+          You can leave a review once you've booked and reached the check-in
+          date for this room.
+        </p>
       )}
-
-      <div className="space-y-3">
-        {reviews.length === 0 ? (
-          <div className="text-muted-foreground">
-            No reviews yet for this room.
-          </div>
-        ) : (
-          reviews.map((r) => (
-            <div key={r.id} className="p-3 border rounded">
-              <div className="flex justify-between items-center">
-                <div className="font-medium">{r.userName}</div>
-                <div className="text-sm text-muted-foreground">
-                  {new Date(r.date).toLocaleDateString()}
-                </div>
-              </div>
-              <div className="text-yellow-400">
-                {"★".repeat(r.rating) + "☆".repeat(5 - r.rating)}
-              </div>
-              {r.comment && <div className="mt-2 text-sm">{r.comment}</div>}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+    </section>
   );
-}
-
-{
-  /* export interface StoredReview {
-  id: number;
-  bookingId: number | string;
-  hotelId: number | string;
-  roomType: string;
-  userId: number | string;
-  userName?: string;
-  rating: number;
-  comment?: string;
-  date: string;
-}
-
-export const reviewsKey = (hotelId: number | string, roomType: string) =>
-  `reviews_room_${hotelId}_${roomType}`;
-
-export function getReviewsForRoom(
-  hotelId: number | string,
-  roomType: string
-): StoredReview[] {
-  try {
-    const raw = localStorage.getItem(reviewsKey(hotelId, roomType));
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveReviewForRoom(
-  hotelId: number | string,
-  roomType: string,
-  review: StoredReview
-) {
-  const list = getReviewsForRoom(hotelId, roomType);
-  list.unshift(review);
-  localStorage.setItem(reviewsKey(hotelId, roomType), JSON.stringify(list));
-}
-
-export function findEligibleBookingForUser(
-  hotelId: number | string,
-  roomType: string,
-  userId: number | string | null
-) {
-  if (!userId) return null;
-  try {
-    const stored = localStorage.getItem("bookings");
-    const bookings = stored ? JSON.parse(stored) : [];
-    const today = new Date();
-    for (const b of bookings) {
-      if (String(b.hotelId) !== String(hotelId)) continue;
-      if (b.roomType && b.roomType !== roomType && b.roomNumber !== roomType)
-        continue;
-      const checkin = b.checkinDate
-        ? new Date(b.checkinDate)
-        : b.startDate
-        ? new Date(b.startDate)
-        : null;
-      const checkout = b.checkoutDate
-        ? new Date(b.checkoutDate)
-        : b.endDate
-        ? new Date(b.endDate)
-        : null;
-      if (!checkin || !checkout) continue;
-      if (today >= checkin) {
-        const roomReviews = getReviewsForRoom(hotelId, roomType);
-        const existing = roomReviews.find(
-          (r) =>
-            String(r.bookingId) === String(b.id) &&
-            String(r.userId) === String(userId)
-        );
-        if (!existing) return b;
-      }
-    }
-  } catch (e) {
-    console.error("findEligibleBookingForUser error", e);
-  }
-  return null;
-} */
 }

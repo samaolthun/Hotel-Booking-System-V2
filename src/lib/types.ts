@@ -18,6 +18,7 @@ export interface Hotel {
   };
   reviews: any[];
   status?: string;
+  _ownerRoom?: boolean;
 }
 
 export interface Review {
@@ -39,28 +40,44 @@ export interface User {
 }
 
 export interface Booking {
-  id: number;
-  userId: number;
-  hotelId: number;
+  id: number | string;
+  userId: string;
+  hotelId?: number | string;
   hotelName: string;
-  hotelImage: string;
-  checkinDate: string;
-  checkoutDate: string;
+  hotelImage?: string;
+  checkinDate: string; // ISO date string (YYYY-MM-DD) or full ISO
+  checkoutDate: string; // ISO date string
   guests: number;
   roomType: string;
-  nights: number;
+  roomTypeKey?: string;
+  nights?: number;
   totalPrice: number;
-  status: "confirmed" | "cancelled" | "completed";
-  bookingDate: string;
+  status: "pending" | "confirmed" | "checked-in" | "canceled" | string;
+  bookingDate?: string;
   paymentMethod?: string;
+  paymentPercent?: number;
+  paymentAmount?: number;
+  adults?: number;
+  children?: number;
+  // any legacy keys
+  [key: string]: any;
 }
 
 export interface Room {
+  id: number;
   number: string;
-  name: string;
   type: string;
+  status: string;
+  floor: string;
+  hotelName: string;
+  location: string;
+  mapEmbed: string;
   price: number;
   capacity: number;
-  status: "available" | "occupied" | "maintenance";
-  // ...other properties
+  description: string;
+  services: string[];
+  amenities: string[];
+  photo: string;
+  lastUpdated: string;
+  rating: number;
 }

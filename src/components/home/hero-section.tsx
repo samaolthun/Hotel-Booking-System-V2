@@ -15,26 +15,10 @@ export function HeroSection() {
   const [roomType, setRoomType] = useState("");
   const [beds, setBeds] = useState("");
   const [guests, setGuests] = useState("");
-  const [searchedRooms, setSearchedRooms] = useState<any[]>([]);
+  // removed searchedRooms state — navigation sends filters to /hotels
   const router = useRouter();
 
-  useEffect(() => {
-    // All fields optional
-    if (destination || roomType || checkin || checkout || beds || guests) {
-      const rooms = getRoomsByFilters({
-        destination,
-        roomType,
-        checkin,
-        checkout,
-        beds,
-        guests,
-      });
-      setSearchedRooms(rooms);
-    } else {
-      setSearchedRooms([]);
-    }
-  }, [destination, roomType, checkin, checkout, beds, guests]);
-
+  // removed: client-side filtering and local search results — navigation will handle it
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     // All fields optional
@@ -97,13 +81,13 @@ export function HeroSection() {
                 className="p-2 rounded text-black bg-white"
               >
                 <option value="">Room Type (Any)</option>
-                <option value="standard">Standard Room</option>
+                <option value="single">Single</option>
                 <option value="deluxe">Deluxe Room</option>
-                <option value="suite">Suite</option>
-                <option value="presidential">Presidential Suite</option>
+                <option value="double">Double</option>
+                {/* <option value="presidential">Presidential Suite</option> */}
               </select>
             </div>
-            <div className="flex flex-col">
+            {/* <div className="flex flex-col">
               <label className="text-sm text-gray-700 mb-1">Beds</label>
               <select
                 value={beds}
@@ -115,7 +99,8 @@ export function HeroSection() {
                 <option value="2">Couple</option>
                 <option value="3">3 Beds</option>
               </select>
-            </div>
+            </div> */}
+            
             <div className="flex flex-col">
               <label className="text-sm text-gray-700 mb-1">Guests</label>
               <input
@@ -137,28 +122,14 @@ export function HeroSection() {
         </div>
       </section>
 
-      {/* Searched Rooms Section */}
-      {searchedRooms.length > 0 && (
-        <section className="py-12 bg-white">
-          <div className="container mx-auto px-4">
-            <h2 className="text-2xl font-bold mb-6 text-center">
-              Available Rooms
-            </h2>
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {searchedRooms.map((room) => (
-                <RoomCard key={room.id} room={room} />
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      {/* Search now navigates to /hotels — results are displayed on the Hotels page */}
 
       {/* Slide show under map */}
       <FeaturedCarousel />
 
       <div className="flex justify-center py-4">
         <iframe
-          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3919.567657919895!2d104.9300304!3d11.5602888!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTHCsDMzJzM3LjAiTiAxMDTCsDU1JzQ4LjEiRQ!5e0!3m2!1sen!2skh!4v1688471234567!5m2!1sen!2skh"
+          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3919.567657919895!2d104.9300304!3d11.5602888!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTHCsDMzM3LjAiTiAxMDTCsDU1JzQ4LjEiRQ!5e0!3m2!1sen!2skh!4v1688471234567!5m2!1sen!2skh"
           width="850"
           height="350"
           style={{ border: 0, borderRadius: "12px" }}
@@ -168,7 +139,7 @@ export function HeroSection() {
           title="Palace Gate Hotel & Resort Map"
         ></iframe>
       </div>
-      
+
       {/* Featured Hotels Section */}
       <FeaturedHotels />
     </>
@@ -180,36 +151,68 @@ export function FeaturedCarousel() {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    // try load persisted hotels (admin-created) from localStorage
+    const fallback = [
+      { src: "/images/image1.jpg", title: "Featured Hotel 1" },
+      { src: "/images/image2.jpg", title: "Featured Hotel 2" },
+      { src: "/images/image6.jpg", title: "Featured Hotel 3" },
+      { src: "/images/image4.jpg", title: "Featured Hotel 4" },
+      { src: "/images/image5.jpg", title: "Featured Hotel 5" },
+    ];
+
     try {
       const stored = localStorage.getItem("hotels");
-      if (stored) {
-        const parsed = JSON.parse(stored) as any[];
-        const imgs = parsed
-          .map((h) => ({
-            src:
-              (h.images && h.images[0]) ||
-              h.image ||
-              h.photo ||
-              "/placeholder.jpg",
-            title: h.name || "",
-          }))
-          .filter(Boolean);
-        if (imgs.length) {
-          setImages(imgs);
-          return;
-        }
+
+      if (!stored) {
+        // seed with fallback so first load has 5 items
+        localStorage.setItem(
+          "hotels",
+          JSON.stringify(
+            fallback.map((f, i) => ({
+              id: `sample-${i + 1}`,
+              name: f.title,
+              images: [f.src],
+              image: f.src,
+              photo: f.src,
+            }))
+          )
+        );
+        setImages(fallback);
+        return;
+      }
+
+      const parsed = JSON.parse(stored) as any[];
+      const imgs = parsed
+        .flatMap((h) =>
+          (h.images && Array.isArray(h.images)
+            ? h.images
+            : h.image
+            ? [h.image]
+            : h.photo
+            ? [h.photo]
+            : []
+          ).map((src: string) => ({ src, title: h.name || "" }))
+        )
+        .filter((i) => !!i.src);
+
+      // merge stored images with fallback until we have 5 unique slides
+      const unique = new Map<string, { src: string; title?: string }>();
+      imgs.forEach((it) => unique.set(it.src, it));
+      for (const f of fallback) {
+        if (unique.size >= 5) break;
+        if (!unique.has(f.src)) unique.set(f.src, f);
+      }
+
+      const final = Array.from(unique.values());
+      if (final.length > 0) {
+        setImages(final);
+        return;
       }
     } catch (e) {
       // ignore parse errors
     }
 
-    // fallback defaults
-    setImages([
-      { src: "/placeholder.jpg", title: "Featured Hotel 1" },
-      { src: "/placeholder.jpg", title: "Featured Hotel 2" },
-      { src: "/placeholder.jpg", title: "Featured Hotel 3" },
-    ]);
+    // final fallback
+    setImages(fallback);
   }, []);
 
   useEffect(() => {

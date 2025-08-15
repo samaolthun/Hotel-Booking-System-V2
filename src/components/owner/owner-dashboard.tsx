@@ -14,7 +14,6 @@ import {
   Trash2,
   Eye,
   Plus,
-  ArrowLeft,
 } from "lucide-react";
 import {
   Card,
@@ -49,23 +48,6 @@ import { useRouter } from "next/navigation";
 import { RoomFormDialog } from "./room-form-dialog";
 import { Badge } from "@/components/ui/badge";
 
-// Add this interface near the top of the file, after imports
-interface FormData {
-  number: string;
-  type: string;
-  status: string;
-  floor: string;
-  hotelName: string;
-  location: string;
-  mapEmbed?: string;
-  price: number;
-  capacity: number;
-  description: string;
-  services: string[];
-  amenities: string[];
-  photo: string | File;
-}
-
 export function OwnerDashboard() {
   const [timeRange, setTimeRange] = useState("week");
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
@@ -89,17 +71,10 @@ export function OwnerDashboard() {
     photo: "",
   });
   const [roomFilters, setRoomFilters] = useState({
-    number: "",
+    type: "",
     floor: "",
     price: "",
-    type: "",
-    status: "",
-  });
-  const [bookingFilters, setBookingFilters] = useState({
-    userName: "",
-    roomNumber: "",
-    startDate: "",
-    endDate: "",
+    rating: "",
   });
   const [currentRoom, setCurrentRoom] = useState<any>(null);
   const [currentBooking, setCurrentBooking] = useState<any>(null);
@@ -107,25 +82,61 @@ export function OwnerDashboard() {
   const router = useRouter();
 
   // Get rooms from localStorage (these are the rooms shown in Hotels page)
-  const userRooms =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("userRooms") || "[]")
-      : [];
+  const [userRooms, setUserRooms] = useState<any[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("userRooms") || "[]";
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   // First, update how you get the bookings data
-  const [bookings, setBookings] = useState(() => {
-    if (typeof window !== "undefined") {
-      const storedBookings = localStorage.getItem("bookings");
-      if (storedBookings) {
-        return JSON.parse(storedBookings).sort(
-          (a: any, b: any) =>
-            new Date(b.bookingDate || b.date).getTime() -
-            new Date(a.bookingDate || a.date).getTime()
-        );
-      }
+  const [bookings, setBookings] = useState<any[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("bookings");
+      if (!stored) return [];
+      const parsed = JSON.parse(stored);
+      const arr = Array.isArray(parsed) ? parsed : [parsed];
+      return arr.sort(
+        (a: any, b: any) =>
+          new Date(b.bookingDate || b.date || 0).getTime() -
+          new Date(a.bookingDate || a.date || 0).getTime()
+      );
+    } catch (e) {
+      console.error("Failed to load bookings from localStorage:", e);
+      return [];
     }
-    return [];
   });
+
+  // Keep bookings and rooms state in sync across tabs (listen to storage events)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      try {
+        if (e.key === "bookings") {
+          const parsed = e.newValue ? JSON.parse(e.newValue) : [];
+          setBookings(Array.isArray(parsed) ? parsed : []);
+        }
+        if (
+          e.key === "userRooms" ||
+          e.key === "ownerRooms" ||
+          e.key === "rooms"
+        ) {
+          const raw = localStorage.getItem("userRooms") || "[]";
+          const parsedRooms = JSON.parse(raw);
+          setUserRooms(Array.isArray(parsedRooms) ? parsedRooms : []);
+        }
+      } catch (err) {
+        // ignore parse errors
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   // Calculate statistics
   const totalRooms = userRooms.length;
@@ -144,31 +155,23 @@ export function OwnerDashboard() {
     .reduce((sum: number, booking: any) => sum + (booking.totalPrice || 0), 0);
 
   // Validate booking data before processing
-  const validateBookingData = (data: any) => {
-    const requiredFields = [
-      "number",
-      "type",
-      "status",
-      "floor",
-      "price",
-      "capacity",
-      "description",
-    ];
-
-    const missingFields = requiredFields.filter(
-      (field) => !data[field] || data[field] === ""
+  const validateBookingData = (data: Partial<typeof formData> = formData) => {
+    // required textual fields (removed hotelName and location)
+    const requiredTextFields = ["description"];
+    const missingText = requiredTextFields.filter(
+      (f) => !String(data[f as keyof typeof data] ?? "").trim()
     );
-
-    if (missingFields.length > 0) {
+    if (missingText.length > 0) {
       toast({
         title: "Missing required fields",
-        description: `Please fill in: ${missingFields.join(", ")}`,
+        description: `Please fill in: ${missingText.join(", ")}`,
         variant: "destructive",
       });
       return false;
     }
 
-    if (data.price <= 0) {
+    const price = Number(data.price ?? formData.price ?? 0);
+    if (isNaN(price) || price <= 0) {
       toast({
         title: "Invalid price",
         description: "Price must be greater than 0",
@@ -177,7 +180,8 @@ export function OwnerDashboard() {
       return false;
     }
 
-    if (data.capacity <= 0) {
+    const capacity = Number(data.capacity ?? formData.capacity ?? 0);
+    if (isNaN(capacity) || capacity <= 0) {
       toast({
         title: "Invalid capacity",
         description: "Capacity must be greater than 0",
@@ -189,38 +193,6 @@ export function OwnerDashboard() {
     return true;
   };
 
-  // Add this function after other handlers
-  const handleFilterChange = (field: string, value: string) => {
-    setRoomFilters((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  // Add this function to filter rooms
-  const filteredRooms = userRooms.filter((room: any) => {
-    const matchesNumber =
-      !roomFilters.number ||
-      room.number.toLowerCase().includes(roomFilters.number.toLowerCase());
-    const matchesFloor =
-      !roomFilters.floor || room.floor.toString() === roomFilters.floor;
-    const matchesPrice =
-      !roomFilters.price || room.price <= parseInt(roomFilters.price);
-    const matchesType =
-      !roomFilters.type ||
-      room.type.toLowerCase() === roomFilters.type.toLowerCase();
-    const matchesStatus =
-      !roomFilters.status ||
-      room.status.toLowerCase() === roomFilters.status.toLowerCase();
-
-    return (
-      matchesNumber &&
-      matchesFloor &&
-      matchesPrice &&
-      matchesType &&
-      matchesStatus
-    );
-  });
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -257,75 +229,106 @@ export function OwnerDashboard() {
     }
   };
 
-  // Add this function to handle file to base64 conversion
-  const convertFileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
+  // Accept either a FormEvent (from a <form onSubmit>) or a data object (from RoomFormDialog)
+  const handleAddRoom = (
+    payload?: React.FormEvent | Partial<typeof formData>
+  ) => {
+    // prevent default if called as a form submit event
+    if (
+      payload &&
+      typeof (payload as React.FormEvent).preventDefault === "function"
+    ) {
+      (payload as React.FormEvent).preventDefault();
+    }
 
-  // Update the handleAddRoom function
-  const handleAddRoom = async (formData: FormData) => {
-    if (!validateBookingData(formData)) return;
+    // merge incoming payload (if data object) with current formData
+    const merged = {
+      ...formData,
+      ...(payload && !(payload as any).preventDefault
+        ? (payload as Partial<typeof formData>)
+        : {}),
+    };
 
-    // formData.photo should already be a base64 string from the dialog
-    console.log(
-      "handleAddRoom received formData.photo (length):",
-      formData.photo ? String(formData.photo).slice(0, 40) : "EMPTY"
-    );
-
-    const photoUrl =
-      typeof formData.photo === "string" && formData.photo
-        ? formData.photo
-        : "/placeholder.jpg";
+    // validate merged data (IMPORTANT: pass merged)
+    if (!validateBookingData(merged)) {
+      return;
+    }
 
     const newRoom = {
       id: Date.now(),
-      ...formData,
-      photo: photoUrl,
-      images: [photoUrl],
+      ...merged,
+      services: Array.isArray(merged.services)
+        ? merged.services
+        : merged.services
+        ? [merged.services]
+        : [],
+      amenities: Array.isArray(merged.amenities)
+        ? merged.amenities
+        : merged.amenities
+        ? [merged.amenities]
+        : [],
       createdAt: new Date().toISOString(),
       rating: 0,
-      reviews: [], // ensure reviews exists
+      reviews: [],
     };
 
-    // Save rooms (admin/user)
-    const existingRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
-    const updatedRooms = [...existingRooms, newRoom];
+    const updatedRooms = [...userRooms, newRoom];
+
+    // persist to multiple keys so public/user pages pick it up
     localStorage.setItem("userRooms", JSON.stringify(updatedRooms));
+    localStorage.setItem("ownerRooms", JSON.stringify(updatedRooms));
 
-    // Also ensure a 'hotels' list used by user listing has an entry with images/image
-    const hotels = JSON.parse(localStorage.getItem("hotels") || "[]");
-    const hotelEntry = {
-      id: newRoom.id,
-      name: newRoom.hotelName || `Room ${newRoom.number}`,
-      image: photoUrl,
-      images: [photoUrl],
-      rating: newRoom.rating ?? 0,
-      reviews: newRoom.reviews ?? [], // ensure reviews exists
-      // ...other fields...
-    };
-    const idx = hotels.findIndex((h: any) => h.id === hotelEntry.id);
-    if (idx >= 0) hotels[idx] = { ...hotels[idx], ...hotelEntry };
-    else hotels.push(hotelEntry);
-    localStorage.setItem("hotels", JSON.stringify(hotels));
+    // also ensure the global "rooms" array contains the new room
+    try {
+      const existingAll = JSON.parse(localStorage.getItem("rooms") || "[]");
+      const allUpdated = Array.isArray(existingAll)
+        ? [...existingAll, newRoom]
+        : updatedRooms;
+      localStorage.setItem("rooms", JSON.stringify(allUpdated));
+    } catch {
+      localStorage.setItem("rooms", JSON.stringify(updatedRooms));
+    }
 
-    console.log("SAVED newRoom.photo preview:", photoUrl.slice(0, 40));
+    // update state so UI updates immediately (no reload)
+    setUserRooms(updatedRooms);
 
     toast({
       title: "Room added successfully!",
       description: "Your room is now available for booking.",
     });
 
+    setFormData({
+      number: "",
+      type: "single",
+      status: "available",
+      floor: "",
+      hotelName: "",
+      location: "",
+      mapEmbed: "",
+      price: 75,
+      capacity: 1,
+      description: "",
+      services: [],
+      amenities: [],
+      photo: "",
+    });
+
     setIsAddRoomOpen(false);
-    window.location.reload();
   };
 
   const handleEditRoom = (room: any) => {
-    const roomData = {
+    // ensure editing is blocked if room is booked
+    if (isRoomBooked(room.id, room.number, room)) {
+      toast({
+        title: "Room is currently booked",
+        description:
+          "You cannot edit this room while it has active or upcoming bookings.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCurrentRoom(room);
+    setFormData({
       number: room.number || "",
       type: room.type || "single",
       status: room.status || "available",
@@ -336,18 +339,56 @@ export function OwnerDashboard() {
       price: room.price || 75,
       capacity: room.capacity || 1,
       description: room.description || "",
-      services: Array.isArray(room.services) ? room.services : [],
-      amenities: Array.isArray(room.amenities) ? room.amenities : [],
+      services: Array.isArray(room.services)
+        ? room.services
+        : [room.services].filter(Boolean),
+      amenities: Array.isArray(room.amenities)
+        ? room.amenities
+        : [room.amenities].filter(Boolean),
       photo: room.photo || "",
-    };
-
-    setCurrentRoom(room);
-    setFormData(roomData);
+    });
     setIsEditRoomOpen(true);
   };
 
-  const handleEditRoomSubmit = (formData: FormData) => {
-    if (!validateBookingData(formData)) {
+  const handleEditRoomSubmit = (
+    payload?: React.FormEvent | Partial<typeof formData>
+  ) => {
+    if (
+      payload &&
+      typeof (payload as React.FormEvent).preventDefault === "function"
+    ) {
+      (payload as React.FormEvent).preventDefault();
+    }
+
+    if (!currentRoom) {
+      toast({
+        title: "No room selected",
+        description: "Please select a room to edit.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const merged = {
+      ...currentRoom,
+      ...formData,
+      ...(payload && !(payload as any).preventDefault
+        ? (payload as Partial<typeof formData>)
+        : {}),
+    };
+
+    // block submit if the room is booked (re-check)
+    if (isRoomBooked(currentRoom.id, currentRoom.number, currentRoom)) {
+      toast({
+        title: "Room is currently booked",
+        description:
+          "You cannot edit this room while it has active or upcoming bookings.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!validateBookingData(merged)) {
       return;
     }
 
@@ -355,19 +396,37 @@ export function OwnerDashboard() {
       room.id === currentRoom.id
         ? {
             ...room,
-            ...formData,
-            services: Array.isArray(formData.services)
-              ? formData.services
-              : [formData.services].filter(Boolean),
-            amenities: Array.isArray(formData.amenities)
-              ? formData.amenities
-              : [formData.amenities].filter(Boolean),
+            ...merged,
+            services: Array.isArray(merged.services)
+              ? merged.services
+              : merged.services
+              ? [merged.services]
+              : [],
+            amenities: Array.isArray(merged.amenities)
+              ? merged.amenities
+              : merged.amenities
+              ? [merged.amenities]
+              : [],
             updatedAt: new Date().toISOString(),
           }
         : room
     );
 
     localStorage.setItem("userRooms", JSON.stringify(updatedRooms));
+    localStorage.setItem("ownerRooms", JSON.stringify(updatedRooms));
+    // also update "rooms" key if present
+    try {
+      const existingAll = JSON.parse(localStorage.getItem("rooms") || "[]");
+      if (Array.isArray(existingAll)) {
+        const allUpdated = existingAll.map((r: any) =>
+          r.id === currentRoom.id ? { ...r, ...merged } : r
+        );
+        localStorage.setItem("rooms", JSON.stringify(allUpdated));
+      }
+    } catch {}
+
+    // update UI state
+    setUserRooms(updatedRooms);
 
     toast({
       title: "Room updated successfully!",
@@ -376,9 +435,6 @@ export function OwnerDashboard() {
 
     setIsEditRoomOpen(false);
     setCurrentRoom(null);
-
-    // Refresh the page to show the updated room
-    window.location.reload();
   };
 
   const handleViewRoomDetails = (room: any) => {
@@ -386,18 +442,112 @@ export function OwnerDashboard() {
     setIsRoomDetailsOpen(true);
   };
 
-  const handleRemoveRoom = (roomId: number) => {
-    if (confirm("Are you sure you want to remove this room?")) {
-      const updatedRooms = userRooms.filter((room: any) => room.id !== roomId);
-      localStorage.setItem("userRooms", JSON.stringify(updatedRooms));
+  // helper: parse safe date
+  const parseDate = (d?: string | null) => {
+    if (!d) return null;
+    const dt = new Date(d);
+    return isNaN(dt.getTime()) ? null : dt;
+  };
 
+  // returns true if there is any active OR upcoming booking that references this room
+  const isRoomBooked = (roomId: any, roomNumber?: any, roomObj?: any) => {
+    const arr = Array.isArray(bookings) ? bookings : [];
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    for (const b of arr) {
+      // Try several ways bookings may reference a room
+      const bRoomId = b.roomId ?? b.room?.id ?? b.room ?? null;
+      const bRoomNumber = b.roomNumber ?? b.room?.number ?? null;
+      const roomsArr = Array.isArray(b.rooms) ? b.rooms : [];
+
+      const references =
+        (bRoomId != null && String(bRoomId) === String(roomId)) ||
+        (bRoomNumber != null &&
+          roomNumber != null &&
+          String(bRoomNumber) === String(roomNumber)) ||
+        roomsArr.some(
+          (r: any) =>
+            String(r?.id ?? r?.number ?? r) === String(roomId ?? roomNumber)
+        ) ||
+        // fallback: if booking stores hotel+roomNumber tie
+        (b.hotelId &&
+          b.roomNumber &&
+          String(b.roomNumber) === String(roomNumber));
+
+      if (!references) continue;
+
+      const parseDateSafe = (d?: any) => {
+        if (!d) return null;
+        const dt = new Date(d);
+        return isNaN(dt.getTime()) ? null : dt;
+      };
+
+      const ci = parseDateSafe(b.checkinDate ?? b.startDate ?? b.from ?? null);
+      const co = parseDateSafe(b.checkoutDate ?? b.endDate ?? b.to ?? null);
+
+      // conservative: if booking references room but has no dates, treat as booked
+      if (!ci && !co) return true;
+
+      // upcoming or ongoing bookings: if checkout exists and is today or later -> booked
+      if (co && co >= todayStart) return true;
+
+      // if checkin exists and is today or future -> upcoming booking -> booked
+      if (ci && ci >= todayStart) return true;
+
+      // if both exist and today's within range -> booked
+      if (ci && co && ci <= now && co >= now) return true;
+    }
+
+    return false;
+  };
+
+  // central guarded click handlers to ensure edits/deletes are blocked reliably
+  const handleEditClick = (room: any) => {
+    const booked = isRoomBooked(room.id, room.number, room);
+    if (booked) {
+      toast({
+        title: "Room is currently booked",
+        description:
+          "You cannot edit this room while it has active or upcoming bookings.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // open edit UI
+    setCurrentRoom(room);
+    setIsEditRoomOpen(true);
+  };
+
+  const handleDeleteClick = (room: any) => {
+    const booked = isRoomBooked(room.id, room.number, room);
+    if (booked) {
+      toast({
+        title: "Room is currently booked",
+        description:
+          "You cannot delete this room while it has active or upcoming bookings.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // proceed with removal
+    if (confirm("Are you sure you want to remove this room?")) {
+      const updatedRooms = userRooms.filter((r: any) => r.id !== room.id);
+      localStorage.setItem("userRooms", JSON.stringify(updatedRooms));
+      localStorage.setItem("ownerRooms", JSON.stringify(updatedRooms));
+      try {
+        const existingAll = JSON.parse(localStorage.getItem("rooms") || "[]");
+        if (Array.isArray(existingAll)) {
+          const allUpdated = existingAll.filter((r: any) => r.id !== room.id);
+          localStorage.setItem("rooms", JSON.stringify(allUpdated));
+        }
+      } catch {}
+      setUserRooms(updatedRooms);
       toast({
         title: "Room removed successfully!",
         description: "The room has been removed from your listings.",
       });
-
-      // Refresh the page to show the updated room list
-      window.location.reload();
     }
   };
 
@@ -434,64 +584,33 @@ export function OwnerDashboard() {
     });
   };
 
-  // Get recent bookings
-  const recentBookings = bookings.slice(0, 5);
-
-  // Add this filtering function after other functions
-  const filteredBookings = bookings.filter((booking: any) => {
-    const matchesUserName =
-      !bookingFilters.userName ||
-      booking.userName
-        ?.toLowerCase()
-        .includes(bookingFilters.userName.toLowerCase());
-    const matchesRoomNumber =
-      !bookingFilters.roomNumber ||
-      booking.roomNumber
-        ?.toLowerCase()
-        .includes(bookingFilters.roomNumber.toLowerCase());
-    const matchesDateRange =
-      (!bookingFilters.startDate ||
-        new Date(booking.checkinDate) >= new Date(bookingFilters.startDate)) &&
-      (!bookingFilters.endDate ||
-        new Date(booking.checkoutDate) <= new Date(bookingFilters.endDate));
-
-    return matchesUserName && matchesRoomNumber && matchesDateRange;
-  });
+  // Always use a normalized array for rendering
+  const safeBookings = Array.isArray(bookings) ? bookings : [];
+  const recentBookings = safeBookings.slice(0, 5);
+  // use safeBookings for rendering anywhere we previously used bookings
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="space-y-4">
-        <Button
-          variant="ghost"
-          className="flex items-center text-muted-foreground hover:text-primary"
-          onClick={() => router.push("/")}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Home
-        </Button>
 
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Owner Dashboard
-            </h1>
-            <p className="text-gray-600">
-              Manage your hotel rooms and bookings
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Button
-              onClick={() => setIsAddRoomOpen(true)}
-              className="bg-primary"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add New Room
-            </Button>
-            <Button variant="outline" onClick={addTestBooking}>
-              Add Test Booking
-            </Button>
-          </div>
+      <div className="flex justify-between items-center">
+        <div>
+          <Button variant="outline" onClick={() => router.push("/")}>
+            Back to Home
+          </Button>
+          <br />
+          <br />
+          <h1 className="text-3xl font-bold text-gray-900">Owner Dashboard</h1>
+          <p className="text-gray-600">Manage your hotel rooms and bookings</p>
+        </div>
+        <div className="flex gap-3">
+          <Button onClick={() => setIsAddRoomOpen(true)} className="bg-primary">
+            <Plus className="w-4 h-4 mr-2" />
+            Add New Room
+          </Button>
+          <Button variant="outline" onClick={addTestBooking}>
+            Add Test Booking
+          </Button>
         </div>
       </div>
 
@@ -566,6 +685,7 @@ export function OwnerDashboard() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="rooms">Room Management</TabsTrigger>
+
           <TabsTrigger value="bookings">Bookings</TabsTrigger>
         </TabsList>
 
@@ -580,9 +700,9 @@ export function OwnerDashboard() {
             <CardContent>
               {recentBookings.length > 0 ? (
                 <div className="space-y-4">
-                  {recentBookings.map((booking: any) => (
+                  {recentBookings.map((booking: any, idx: number) => (
                     <div
-                      key={booking.id}
+                      key={booking?.id ?? `recent-booking-${idx}`}
                       className="flex items-center justify-between p-4 border rounded-lg"
                     >
                       <div className="flex items-center space-x-4">
@@ -635,88 +755,9 @@ export function OwnerDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Filter Section */}
-              <div className="mb-6 grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="roomNumber">Room Number</Label>
-                  <Input
-                    id="roomNumber"
-                    placeholder="Search room number"
-                    value={roomFilters.number}
-                    onChange={(e) =>
-                      handleFilterChange("number", e.target.value)
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="floor">Floor</Label>
-                  <Input
-                    id="floor"
-                    placeholder="Filter by floor"
-                    value={roomFilters.floor}
-                    onChange={(e) =>
-                      handleFilterChange("floor", e.target.value)
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="price">Max Price</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    placeholder="Max price"
-                    value={roomFilters.price}
-                    onChange={(e) =>
-                      handleFilterChange("price", e.target.value)
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="type">Room Type</Label>
-                  <Select
-                    value={roomFilters.type}
-                    onValueChange={(value) => handleFilterChange("type", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="single">Single</SelectItem>
-                      <SelectItem value="double">Double</SelectItem>
-                      <SelectItem value="deluxe">Deluxe</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select
-                    value={roomFilters.status}
-                    onValueChange={(value) =>
-                      handleFilterChange("status", value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="available">Available</SelectItem>
-                      <SelectItem value="occupied">Occupied</SelectItem>
-                      <SelectItem value="maintenance">Maintenance</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Room List - Update to use filteredRooms instead of userRooms */}
-              {filteredRooms.length > 0 ? (
+              {userRooms.length > 0 ? (
                 <div className="space-y-4">
-                  {filteredRooms.map((room: any) => (
+                  {userRooms.map((room: any) => (
                     <div
                       key={room.id}
                       className="flex items-center justify-between p-4 border rounded-lg"
@@ -748,17 +789,41 @@ export function OwnerDashboard() {
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
+
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleEditRoom(room)}
+                          onClick={() => handleEditClick(room)}
+                          disabled={isRoomBooked(room.id, room.number, room)}
+                          title={
+                            isRoomBooked(room.id, room.number, room)
+                              ? "Room has active/upcoming bookings"
+                              : "Edit room"
+                          }
+                          className={
+                            isRoomBooked(room.id, room.number, room)
+                              ? "opacity-50 cursor-not-allowed"
+                              : ""
+                          }
                         >
-                          <Edit className="w-4 h-4" />
+                          Edit
                         </Button>
+
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleRemoveRoom(room.id)}
+                          onClick={() => handleDeleteClick(room)}
+                          disabled={isRoomBooked(room.id, room.number, room)}
+                          title={
+                            isRoomBooked(room.id, room.number, room)
+                              ? "Cannot delete a booked room"
+                              : "Remove room"
+                          }
+                          className={
+                            isRoomBooked(room.id, room.number, room)
+                              ? "opacity-50 cursor-not-allowed"
+                              : ""
+                          }
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -768,22 +833,12 @@ export function OwnerDashboard() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground">
-                    No rooms match your filters
-                  </p>
+                  <p className="text-muted-foreground">No rooms added yet</p>
                   <Button
-                    onClick={() =>
-                      setRoomFilters({
-                        number: "",
-                        floor: "",
-                        price: "",
-                        type: "",
-                        status: "",
-                      })
-                    }
+                    onClick={() => setIsAddRoomOpen(true)}
                     className="mt-2"
                   >
-                    Clear Filters
+                    Add Your First Room
                   </Button>
                 </div>
               )}
@@ -799,73 +854,9 @@ export function OwnerDashboard() {
               <CardDescription>View and manage all bookings</CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Booking Filters */}
-              <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="userName">Guest Name</Label>
-                  <Input
-                    id="userName"
-                    placeholder="Search by guest name"
-                    value={bookingFilters.userName}
-                    onChange={(e) =>
-                      setBookingFilters((prev) => ({
-                        ...prev,
-                        userName: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="roomNumber">Room Number</Label>
-                  <Input
-                    id="roomNumber"
-                    placeholder="Search by room number"
-                    value={bookingFilters.roomNumber}
-                    onChange={(e) =>
-                      setBookingFilters((prev) => ({
-                        ...prev,
-                        roomNumber: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="startDate">Check-in Date</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={bookingFilters.startDate}
-                    onChange={(e) =>
-                      setBookingFilters((prev) => ({
-                        ...prev,
-                        startDate: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="endDate">Check-out Date</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={bookingFilters.endDate}
-                    onChange={(e) =>
-                      setBookingFilters((prev) => ({
-                        ...prev,
-                        endDate: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Bookings List - Update to use filteredBookings */}
-              {filteredBookings.length > 0 ? (
+              {bookings.length > 0 ? (
                 <div className="space-y-4">
-                  {filteredBookings.map((booking: any) => (
+                  {safeBookings.map((booking: any) => (
                     <div
                       key={booking.id}
                       className="flex items-center justify-between p-4 border rounded-lg"
@@ -911,21 +902,9 @@ export function OwnerDashboard() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground">
-                    No bookings match your filters
-                  </p>
-                  <Button
-                    onClick={() =>
-                      setBookingFilters({
-                        userName: "",
-                        roomNumber: "",
-                        startDate: "",
-                        endDate: "",
-                      })
-                    }
-                    className="mt-2"
-                  >
-                    Clear Filters
+                  <p className="text-muted-foreground">No bookings yet</p>
+                  <Button onClick={addTestBooking} className="mt-2">
+                    Add Test Booking
                   </Button>
                 </div>
               )}
@@ -945,10 +924,7 @@ export function OwnerDashboard() {
       {/* Edit Room Dialog */}
       <RoomFormDialog
         isOpen={isEditRoomOpen}
-        onClose={() => {
-          setIsEditRoomOpen(false);
-          setCurrentRoom(null);
-        }}
+        onClose={() => setIsEditRoomOpen(false)}
         onSubmit={handleEditRoomSubmit}
         title="Edit Room"
         initialData={currentRoom}
@@ -970,10 +946,10 @@ export function OwnerDashboard() {
                 />
               )}
               <div className="grid grid-cols-2 gap-4">
-                {/* <div>
+                <div>
                   <Label className="font-medium">Hotel Name</Label>
                   <p>{currentRoom.hotelName}</p>
-                </div> */}
+                </div>
                 <div>
                   <Label className="font-medium">Room Number</Label>
                   <p>{currentRoom.number}</p>
@@ -1007,10 +983,10 @@ export function OwnerDashboard() {
                 <Label className="font-medium">Description</Label>
                 <p>{currentRoom.description}</p>
               </div>
-              {/* <div>
+              <div>
                 <Label className="font-medium">Location</Label>
                 <p>{currentRoom.location}</p>
-              </div> */}
+              </div>
               {currentRoom.services && currentRoom.services.length > 0 && (
                 <div>
                   <Label className="font-medium">Services</Label>
@@ -1104,27 +1080,3 @@ export function OwnerDashboard() {
     </div>
   );
 }
-
-// Add this function outside the component
-const handleDeleteRoom = (roomId: number) => {
-  // remove from admin/user rooms store
-  const existingRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
-  const updatedRooms = existingRooms.filter((r: any) => r.id !== roomId);
-  localStorage.setItem("userRooms", JSON.stringify(updatedRooms));
-
-  // remove from user-facing hotels list as well
-  const existingHotels = JSON.parse(localStorage.getItem("hotels") || "[]");
-  const updatedHotels = existingHotels.filter((h: any) => h.id !== roomId);
-  localStorage.setItem("hotels", JSON.stringify(updatedHotels));
-
-  // update local component state if you keep rooms in state (optional)
-  // setRooms(prev => prev.filter(r => r.id !== roomId)); // uncomment if setRooms exists
-
-  // Notify other components in same window
-  window.dispatchEvent(
-    new CustomEvent("hotels-updated", { detail: { id: roomId } })
-  );
-
-  // If you want other tabs/windows to pick it up, also set a "lastUpdated" key (triggers storage)
-  localStorage.setItem("hotels_last_updated", String(Date.now()));
-};

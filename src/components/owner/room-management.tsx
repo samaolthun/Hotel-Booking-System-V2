@@ -2,7 +2,6 @@
 const [isRoomDetailsOpen, setIsRoomDetailsOpen] = useState(false);
 import type React from "react";
 
-import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
   Search,
@@ -17,12 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -42,6 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { RoomFormDialog } from "./room-form-dialog";
+import { useRouter } from "next/navigation";
 
 // Add type for room and booking
 interface Room {
@@ -60,7 +55,7 @@ interface Room {
   amenities: string[];
   photo: string;
   lastUpdated: string;
-  rating: number;
+  rating?: number; // <-- add this (optional number)
 }
 interface Booking {
   id: number;
@@ -79,9 +74,16 @@ interface Booking {
 
 export function RoomManagement() {
   const [rooms, setRooms] = useState<Room[]>(() => {
-    // Get rooms only from localStorage, without fallback to sample data
     const stored = localStorage.getItem("ownerRooms");
-    return stored ? JSON.parse(stored) : [];
+    const parsed = stored ? JSON.parse(stored) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((r: any) => ({
+      ...r,
+      // normalize rating to number and ensure other numeric fields are typed correctly
+      rating: r?.rating != null && r.rating !== "" ? Number(r.rating) : 0,
+      price: r?.price != null ? Number(r.price) : 0,
+      capacity: r?.capacity != null ? Number(r.capacity) : 1,
+    }));
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
@@ -126,8 +128,6 @@ export function RoomManagement() {
       ...formData,
       id: Date.now(), // Ensure unique ID
       lastUpdated: new Date().toISOString().split("T")[0],
-      rating: 0, // Initialize rating to 0
-      reviews: [] // Initialize empty reviews array
     };
 
     // Get existing rooms from both storages
@@ -576,6 +576,7 @@ export function RoomManagement() {
                   String(room.floor) !== roomFilters.floor
                 )
                   return false;
+
                 if (roomFilters.price) {
                   if (roomFilters.price === "low" && room.price > 100)
                     return false;
@@ -587,17 +588,15 @@ export function RoomManagement() {
                   if (roomFilters.price === "high" && room.price <= 300)
                     return false;
                 }
+
                 if (roomFilters.rating) {
-                  if (roomFilters.rating === "high" && room.rating < 4)
+                  const r = Number(room.rating ?? 0); // normalize safely
+                  if (roomFilters.rating === "high" && r < 4) return false;
+                  if (roomFilters.rating === "medium" && (r < 2.5 || r >= 4))
                     return false;
-                  if (
-                    roomFilters.rating === "medium" &&
-                    (room.rating < 2.5 || room.rating >= 4)
-                  )
-                    return false;
-                  if (roomFilters.rating === "low" && room.rating >= 2.5)
-                    return false;
+                  if (roomFilters.rating === "low" && r >= 2.5) return false;
                 }
+
                 return true;
               })
               .map((room) => (
@@ -615,7 +614,7 @@ export function RoomManagement() {
                           Price: ${room.price}
                         </div>
                         <div className="text-sm text-gray-500">
-                          Rating: {room.rating ? room.rating.toFixed(1) : 'No ratings yet'}
+                          Rating: {room.rating || "N/A"}
                         </div>
                       </div>
                       <Button

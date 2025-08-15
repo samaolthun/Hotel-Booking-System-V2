@@ -20,11 +20,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, CheckCircle, Loader2, Calendar, Users, CreditCard } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Loader2,
+  Calendar,
+  Users,
+  CreditCard,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import type { Hotel } from "@/lib/types";
+import { datesOverlap } from "@/lib/availability";
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -53,7 +61,9 @@ export function BookingModal({
   const [paymentMethod, setPaymentMethod] = useState("KHQR");
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [step, setStep] = useState<"details" | "payment" | "confirmation">("details");
+  const [step, setStep] = useState<"details" | "payment" | "confirmation">(
+    "details"
+  );
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -77,12 +87,48 @@ export function BookingModal({
   useEffect(() => {
     if (checkin && checkout && roomType && checkin < checkout) {
       setIsChecking(true);
-      // Simulate API call delay
-      setTimeout(() => {
-        // For now, assume all rooms are available
-        setIsAvailable(true);
-        setIsChecking(false);
-      }, 500);
+
+      // small debounce / simulate API latency
+      const t = setTimeout(() => {
+        try {
+          const bookings = JSON.parse(localStorage.getItem("bookings") || "[]");
+
+          const conflict = (bookings || []).some((b: any) => {
+            // same hotel
+            if (String(b.hotelId) !== String(hotel.id)) return false;
+
+            // compare by stored roomTypeKey (new) or roomType (name) for backward compatibility
+            const bRoomKey = b.roomTypeKey ?? b.roomType;
+            const requestedRoomKey = String(roomType);
+            const requestedRoomName = String(
+              hotel.rooms[roomType]?.name ?? roomType
+            );
+
+            const sameRoom =
+              String(bRoomKey) === requestedRoomKey ||
+              String(b.roomType) === requestedRoomName;
+
+            if (!sameRoom) return false;
+
+            const bStart = b.checkinDate;
+            const bEnd = b.checkoutDate;
+            if (!bStart || !bEnd) return false;
+
+            // use shared helper to detect overlap (treat checkout as exclusive)
+            return datesOverlap(checkin, checkout, bStart, bEnd);
+          });
+
+          setIsAvailable(!conflict);
+        } catch (e) {
+          console.error("availability check failed", e);
+          // fallback: assume available so user can continue (handlePayment will still block final conflicts)
+          setIsAvailable(true);
+        } finally {
+          setIsChecking(false);
+        }
+      }, 300);
+
+      return () => clearTimeout(t);
     } else {
       setIsAvailable(null);
     }
@@ -162,11 +208,45 @@ export function BookingModal({
       return;
     }
 
+    // 1. Load all bookings for this room
+    const allBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
+    const checkinDate = checkin;
+    const checkoutDate = checkout;
+
+    // 2. Check for overlap — compare by hotelId + roomTypeKey (fallback to roomType/names)
+    const isConflict = allBookings.some((b: any) => {
+      const sameHotel = String(b.hotelId) === String(hotel.id);
+      if (!sameHotel) return false;
+
+      // b may have roomTypeKey (new) or roomType (name) from older bookings
+      const bRoomKey = b.roomTypeKey ?? b.roomType;
+      const requestedRoomKey = String(roomType);
+      const requestedRoomName = String(hotel.rooms[roomType]?.name ?? roomType);
+
+      const sameRoom =
+        String(bRoomKey) === requestedRoomKey ||
+        String(b.roomType) === requestedRoomName;
+
+      if (!sameRoom) return false;
+      const bStart = b.checkinDate;
+      const bEnd = b.checkoutDate;
+      if (!bStart || !bEnd) return false;
+
+      return datesOverlap(checkinDate, checkoutDate, bStart, bEnd);
+    });
+
+    if (isConflict) {
+      alert(
+        "This room is already booked for the selected dates. Please choose another date or room."
+      );
+      return;
+    }
+
     setIsProcessingPayment(true);
 
     try {
       // Simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Create the final booking
       const finalBooking = {
@@ -178,18 +258,26 @@ export function BookingModal({
         checkinDate: checkin,
         checkoutDate: checkout,
         guests: Number(guests),
-        roomType: hotel.rooms[roomType]?.name || roomType,
+        // store both the room key and the display name to make future checks robust
+        roomTypeKey: roomType,
+        roomType: hotel.rooms[roomType]?.name || String(roomType),
         nights: calculateNights(),
         totalPrice: calculateTotalPrice(),
         status: "confirmed" as const,
         bookingDate: new Date().toISOString(),
         paymentMethod,
+        paymentPercent: Number(paymentPercent),
+        paymentAmount: Math.round(
+          (Number(paymentPercent) / 100) * calculateTotalPrice()
+        ),
         adults: Number(adults),
         children: Number(children),
       };
 
       // Save to localStorage
-      const existingBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
+      const existingBookings = JSON.parse(
+        localStorage.getItem("bookings") || "[]"
+      );
       const updatedBookings = [...existingBookings, finalBooking];
       localStorage.setItem("bookings", JSON.stringify(updatedBookings));
 
@@ -197,9 +285,7 @@ export function BookingModal({
       if (hotel._ownerRoom) {
         const userRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
         const updatedRooms = userRooms.map((room: any) =>
-          room.id === hotel.id
-            ? { ...room, status: "occupied" }
-            : room
+          room.id === hotel.id ? { ...room, status: "occupied" } : room
         );
         localStorage.setItem("userRooms", JSON.stringify(updatedRooms));
       }
@@ -211,11 +297,11 @@ export function BookingModal({
         title: "Booking confirmed!",
         description: "Your hotel booking has been successfully confirmed.",
       });
-
     } catch (error) {
       toast({
         title: "Payment failed",
-        description: "There was an error processing your payment. Please try again.",
+        description:
+          "There was an error processing your payment. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -248,6 +334,16 @@ export function BookingModal({
   };
 
   if (step === "payment") {
+    const totalPrice = calculateTotalPrice();
+    const percentOptions = [
+      { value: "50", label: "50%" },
+      { value: "70", label: "70%" },
+      { value: "100", label: "100%" },
+    ];
+    const paymentAmount = Math.round(
+      (Number(paymentPercent) / 100) * totalPrice
+    );
+
     return (
       <Dialog open={isOpen} onOpenChange={closeModal}>
         <DialogContent className="max-w-md">
@@ -268,7 +364,9 @@ export function BookingModal({
                 </div>
                 <div className="flex justify-between">
                   <span>Room Type:</span>
-                  <span className="font-medium">{hotel.rooms[roomType]?.name || roomType}</span>
+                  <span className="font-medium">
+                    {hotel.rooms[roomType]?.name || roomType}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Check-in:</span>
@@ -288,12 +386,35 @@ export function BookingModal({
                 </div>
                 <div className="flex justify-between font-semibold text-lg">
                   <span>Total:</span>
-                  <span>${calculateTotalPrice()}</span>
+                  <span>${totalPrice}</span>
                 </div>
               </div>
             </div>
 
             <div className="space-y-3">
+              {/* Payment Percentage Selection */}
+              <div>
+                <label className="text-sm font-medium">
+                  Payment Percentage
+                </label>
+                <Select
+                  value={paymentPercent}
+                  onValueChange={setPaymentPercent}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {percentOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Payment Method Selection */}
               <div>
                 <label className="text-sm font-medium">Payment Method</label>
                 <Select value={paymentMethod} onValueChange={setPaymentMethod}>
@@ -306,6 +427,12 @@ export function BookingModal({
                     <SelectItem value="paypal">PayPal</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Show calculated payment amount */}
+              <div className="flex justify-between font-semibold text-lg">
+                <span>Amount to Pay:</span>
+                <span>${paymentAmount}</span>
               </div>
 
               <Button
@@ -321,7 +448,7 @@ export function BookingModal({
                 ) : (
                   <>
                     <CreditCard className="mr-2 h-4 w-4" />
-                    Pay ${calculateTotalPrice()}
+                    Pay ${paymentAmount}
                   </>
                 )}
               </Button>
@@ -487,7 +614,8 @@ export function BookingModal({
             <Alert>
               <CheckCircle className="h-4 w-4" />
               <AlertDescription>
-                Room available! {calculateNights()} night(s) for ${calculateTotalPrice()}
+                Room available! {calculateNights()} night(s) for $
+                {calculateTotalPrice()}
               </AlertDescription>
             </Alert>
           )}
