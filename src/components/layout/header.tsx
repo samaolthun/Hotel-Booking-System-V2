@@ -148,9 +148,9 @@ export function Header() {
                           <AvatarImage
                             src={user.avatar || "/placeholder.svg"}
                           />
-                          <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                          <AvatarFallback>{user.name?.charAt(0) || "U"}</AvatarFallback>
                         </Avatar>
-                        <span>{user.name}</span>
+                        <span>{user.name || "User"}</span>
                         <ChevronDown className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -264,11 +264,11 @@ export function Header() {
                           <AvatarImage
                             src={user.avatar || "/placeholder.svg"}
                           />
-                          <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                          <AvatarFallback>{user.name?.charAt(0) || "U"}</AvatarFallback>
                         </Avatar>
                       </div>
                       <div className="ml-3">
-                        <div className="text-base font-medium">{user.name}</div>
+                        <div className="text-base font-medium">{user.name || "User"}</div>
                       </div>
                     </div>
                     <Button

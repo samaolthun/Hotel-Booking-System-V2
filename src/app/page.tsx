@@ -1,3 +1,5 @@
+"use client";
+
 import { HeroSection } from "@/components/home/hero-section";
 import { FeaturedHotels } from "@/components/home/featured-hotels";
 import { Header } from "@/components/layout/header";

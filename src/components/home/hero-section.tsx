@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getRoomsByFilters } from "@/lib/data/hotels";
 import { RoomCard } from "@/components/hotels/room-card";
 import { FeaturedHotels } from "@/components/home/featured-hotels";
+// import { FeaturedCarousel } from "/components/home/featured-carousel";
 import Link from "next/link";
 
 export function HeroSection() {
@@ -152,8 +153,8 @@ export function HeroSection() {
         </section>
       )}
 
-      {/* Featured Hotels Section */}
-      <FeaturedHotels />
+      {/* Slide show under map */}
+      <FeaturedCarousel />
 
       <div className="flex justify-center py-4">
         <iframe
@@ -167,6 +168,97 @@ export function HeroSection() {
           title="Palace Gate Hotel & Resort Map"
         ></iframe>
       </div>
+      
+      {/* Featured Hotels Section */}
+      <FeaturedHotels />
     </>
+  );
+}
+
+export function FeaturedCarousel() {
+  const [images, setImages] = useState<{ src: string; title?: string }[]>([]);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    // try load persisted hotels (admin-created) from localStorage
+    try {
+      const stored = localStorage.getItem("hotels");
+      if (stored) {
+        const parsed = JSON.parse(stored) as any[];
+        const imgs = parsed
+          .map((h) => ({
+            src:
+              (h.images && h.images[0]) ||
+              h.image ||
+              h.photo ||
+              "/placeholder.jpg",
+            title: h.name || "",
+          }))
+          .filter(Boolean);
+        if (imgs.length) {
+          setImages(imgs);
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+
+    // fallback defaults
+    setImages([
+      { src: "/placeholder.jpg", title: "Featured Hotel 1" },
+      { src: "/placeholder.jpg", title: "Featured Hotel 2" },
+      { src: "/placeholder.jpg", title: "Featured Hotel 3" },
+    ]);
+  }, []);
+
+  useEffect(() => {
+    if (!images.length) return;
+    const t = setInterval(() => setIndex((i) => (i + 1) % images.length), 4000);
+    return () => clearInterval(t);
+  }, [images]);
+
+  if (!images.length) return null;
+
+  const prev = () => setIndex((i) => (i - 1 + images.length) % images.length);
+  const next = () => setIndex((i) => (i + 1) % images.length);
+
+  return (
+    <section className="py-8">
+      <div className="max-w-4xl mx-auto relative">
+        <div className="rounded-lg overflow-hidden shadow-lg">
+          <img
+            src={images[index].src}
+            alt={images[index].title || `slide-${index}`}
+            className="w-full h-64 md:h-96 object-cover"
+          />
+          {images[index].title && (
+            <div className="absolute left-4 bottom-4 bg-black/50 text-white px-3 py-1 rounded">
+              {images[index].title}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-between items-center mt-3">
+          <button
+            onClick={prev}
+            aria-label="Previous"
+            className="px-3 py-1 bg-white/90 rounded shadow"
+          >
+            Prev
+          </button>
+          <div className="text-sm text-muted-foreground">
+            {index + 1} / {images.length}
+          </div>
+          <button
+            onClick={next}
+            aria-label="Next"
+            className="px-3 py-1 bg-white/90 rounded shadow"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }

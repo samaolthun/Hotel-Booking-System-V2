@@ -25,7 +25,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check for stored user session
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        // Validate that the user object has required properties
+        if (parsedUser && typeof parsedUser === 'object' && parsedUser.name && parsedUser.email) {
+          setUser(parsedUser);
+        } else {
+          // Invalid user data, remove it
+          localStorage.removeItem("user");
+        }
+      } catch (error) {
+        // Invalid JSON, remove corrupted data
+        localStorage.removeItem("user");
+        console.error("Failed to parse stored user data:", error);
+      }
     }
     setLoading(false);
   }, []);
@@ -44,13 +57,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role = "owner";
       }
     }
+    const name = email.split("@")[0] || "User";
     const userData: User = {
       id: 1,
-      name: email.split("@")[0],
+      name,
       email,
-      avatar: `https://ui-avatars.com/api/?name=${
-        email.split("@")[0]
-      }&background=4f46e5&color=fff`,
+      avatar: `https://ui-avatars.com/api/?name=${name}&background=4f46e5&color=fff`,
       role,
     };
 

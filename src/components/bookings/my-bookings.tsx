@@ -43,7 +43,13 @@ export function MyBookings() {
     const all: Booking[] = stored ? JSON.parse(stored) : [];
     const updated = all.filter((booking) => booking.id !== bookingToCancel.id);
     localStorage.setItem("bookings", JSON.stringify(updated));
-    setBookings(updated.filter((booking) => booking.userId === user.id));
+
+    // SAFELY update visible bookings only if user exists
+    if (!user) {
+      setBookings([]);
+    } else {
+      setBookings(updated.filter((booking) => booking.userId === user.id));
+    }
 
     setShowPolicyDialog(false);
     setBookingToCancel(null);
@@ -134,20 +140,21 @@ export function MyBookings() {
               ⚠️ Cancellation Policy Reminder
             </AlertDialogTitle>
             <AlertDialogDescription className="text-left space-y-3">
-              <p>
+              <div>
                 <strong>Cancellation Policy:</strong>
-              </p>
-              <p className="bg-red-50 p-3 rounded-md border border-red-200">
+              </div>
+
+              <div className="bg-red-50 p-3 rounded-md border border-red-200">
                 If you cancel your booking before 2 days of check-in, your
                 pre-order payment will <strong>NOT be refunded</strong>.
-              </p>
-              <p>
+              </div>
+              <div>
                 Are you sure you want to proceed with cancelling your booking
                 for <strong>{bookingToCancel?.hotelName}</strong>?
-              </p>
-              <p className="text-sm text-gray-600">
+              </div>
+              <div className="text-sm text-gray-600">
                 Check-in date: {bookingToCancel?.checkinDate}
-              </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

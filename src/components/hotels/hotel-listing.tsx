@@ -1,128 +1,136 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { datesOverlap, isRoomAvailable } from "@/lib/availability";
 import Link from "next/link";
 import { HotelCard } from "./hotel-card";
 import { HotelCardSkeleton } from "./hotel-card-skeleton"; // Import the new skeleton component
-import { getAllHotels } from "@/src/lib/data/hotels";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/src/components/ui/tabs";
-import { Button } from "@/src/components/ui/button";
+import { getAllHotels } from "@/lib/data/hotels";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { Grid3x3, LayoutList } from "lucide-react";
-import type { Hotel } from "@/src/lib/types";
+import type { Hotel } from "@/lib/types";
 
 export function HotelListing() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [isLoading, setIsLoading] = useState(true); // New loading state
-  const [hotelsData, setHotelsData] = useState<Hotel[]>([]); // State to hold fetched hotels
+  const [hotelsData, setHotelsData] = useState<Hotel[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const searchParams = useSearchParams();
+  const checkin = searchParams?.get("checkin") ?? "";
+  const checkout = searchParams?.get("checkout") ?? "";
 
-  // Simulate data fetching
-  useEffect(() => {
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      // Get hotels from data and userRooms from localStorage
-      const hotels = getAllHotels();
-      const userRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
-      // Convert userRooms to Hotel-like objects for display
-      const userRoomHotels = userRooms.map((room: any) => {
-        // Calculate real rating from localStorage reviews
-        let realRating = 0;
-        let realReviewCount = 0;
-        try {
-          const storedReviews = localStorage.getItem(`reviews_${room.id}`);
-          if (storedReviews) {
-            const reviews = JSON.parse(storedReviews);
-            if (reviews.length > 0) {
-              const totalRating = reviews.reduce(
-                (sum: number, review: any) => sum + review.rating,
-                0
-              );
-              realRating = Math.round((totalRating / reviews.length) * 10) / 10;
-              realReviewCount = reviews.length;
-            }
-          }
-        } catch (error) {
-          // If there's an error, use default values
-        }
+  // normalize search params once
+  const destinationQuery = (searchParams?.get("destination") ?? "")
+    .trim()
+    .toLowerCase();
+  const generalQuery = (searchParams?.get("q") ?? "").trim().toLowerCase();
+  const roomType = (searchParams?.get("roomType") ?? "").trim();
+  const minPrice = Number(searchParams?.get("minPrice") ?? 0);
+  const maxPrice = Number(searchParams?.get("maxPrice") ?? 10_000);
+  const amenitiesFilter = (searchParams?.get("amenities") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-        return {
-          id: room.id,
-          name: room.hotelName || `Room ${room.number}`,
-          location: room.location || "Location not specified",
-          mapEmbed: room.mapEmbed || "",
-          price: room.price,
-          image: room.photo || "/placeholder.jpg",
-          images: [room.photo || "/placeholder.jpg"],
-          rating: realRating,
-          description: room.description || "No description provided.",
-          amenities: room.services || [],
-          rooms: {
-            [room.type]: {
-              name:
-                room.type.charAt(0).toUpperCase() +
-                room.type.slice(1) +
-                " Room",
-              price: room.price,
-            },
-          },
-          reviews: Array(realReviewCount).fill({}), // Create array with correct length for display
-          _ownerRoom: true,
-          _ownerRoomRaw: room,
-        };
-      });
-      setHotelsData([...hotels, ...userRoomHotels]);
+  const loadHotels = useCallback(() => {
+    try {
+      // If you have a built-in/base list, keep it; otherwise start with empty
+      const baseHotels: Hotel[] = (window as any).__BASE_HOTELS__ || [];
+
+      const storedHotels = JSON.parse(
+        localStorage.getItem("hotels") || "[]"
+      ) as Hotel[];
+      const storedRooms = JSON.parse(
+        localStorage.getItem("userRooms") || "[]"
+      ) as any[];
+
+      // Convert userRooms -> hotel shaped entries if needed
+      const roomsAsHotels = (storedRooms || []).map((r: any) => ({
+        id: r.id,
+        name: r.hotelName || `Room ${r.number}`,
+        location: r.location || "",
+        price: Number(r.price || 0),
+        description: r.description || "",
+        image: r.photo || (r.images && r.images[0]) || "/placeholder.jpg",
+        images: r.images || [r.photo || "/placeholder.jpg"],
+        amenities: Array.isArray(r.amenities) ? r.amenities : [],
+        rating: r.rating ?? 0,
+        reviews: r.reviews ?? [],
+        status: r.status ?? "available",
+        rooms: r.rooms ?? undefined,
+      })) as Hotel[];
+
+      // Merge with priority: storedHotels (admin created) + roomsAsHotels + baseHotels (avoid duplicates by id)
+      const mergedMap = new Map<number | string, Hotel>();
+      (baseHotels || []).forEach((h) => mergedMap.set(h.id, h));
+      (roomsAsHotels || []).forEach((h) => mergedMap.set(h.id, h));
+      (storedHotels || []).forEach((h) => mergedMap.set(h.id, h));
+      const merged = Array.from(mergedMap.values());
+
+      setHotelsData(merged);
+    } catch (e) {
+      console.error("loadHotels error", e);
+      setHotelsData([]);
+    } finally {
       setIsLoading(false);
-    }, 1000); // Simulate 1 second loading time
-    return () => clearTimeout(timer);
+    }
   }, []);
 
-  // Re-compute filtered list when the query-string changes or hotelsData updates
-  const filteredHotels = useMemo(() => {
-    if (isLoading) return []; // Don't filter if still loading initial data
+  useEffect(() => {
+    loadHotels();
 
-    // Collect filter values
-    const generalQuery = searchParams.get("q")?.toLowerCase();
-    const specificDestination = searchParams.get("destination")?.toLowerCase();
-    const roomType = searchParams.get("roomType");
-    const minPrice = Number(searchParams.get("minPrice") ?? 0);
-    const maxPrice = Number(searchParams.get("maxPrice") ?? 10_000);
-    const amenities = (searchParams.get("amenities") ?? "")
-      .split(",")
-      .filter(Boolean);
+    // update when other tabs change localStorage
+    const onStorage = (ev: StorageEvent) => {
+      if (
+        ev.key === "hotels" ||
+        ev.key === "userRooms" ||
+        ev.key === "hotels_last_updated"
+      ) {
+        loadHotels();
+      }
+    };
+    // update when same-window custom event fired by admin actions
+    const onCustom = () => loadHotels();
 
-    return hotelsData
-      .filter((hotel) => {
-        // If a specific destination is provided (from HeroSection), filter strictly by that location.
-        if (specificDestination) {
-          return hotel.location.toLowerCase().includes(specificDestination);
-        }
-        // Otherwise, if a general query is provided (from SearchBar), filter by name, location, or description.
-        if (generalQuery) {
-          return (
-            hotel.name.toLowerCase().includes(generalQuery) ||
-            hotel.location.toLowerCase().includes(generalQuery) ||
-            hotel.description.toLowerCase().includes(generalQuery)
-          );
-        }
-        return true; // No relevant search query or destination
-      })
-      .filter(
-        (hotel) =>
-          !roomType || hotel.rooms[roomType as keyof typeof hotel.rooms]
-      )
-      .filter((hotel) => hotel.price >= minPrice && hotel.price <= maxPrice)
-      .filter(
-        (hotel) =>
-          amenities.length === 0 ||
-          amenities.every((a) => hotel.amenities.includes(a))
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("hotels-updated", onCustom as EventListener);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("hotels-updated", onCustom as EventListener);
+    };
+  }, [loadHotels]);
+
+  // Filter hotels according to availability: require at least one available room
+  const visibleHotels = hotelsData.filter((hotel: any) => {
+    // adapt to hotel.rooms shape: try array then object
+    const roomList: any[] = Array.isArray(hotel.rooms)
+      ? hotel.rooms
+      : hotel.rooms && typeof hotel.rooms === "object"
+      ? Object.values(hotel.rooms)
+      : hotel.roomList ?? [];
+
+    if (roomList.length === 0) {
+      // fallback: consider hotel-level status
+      return (hotel.status ?? "available") === "available";
+    }
+
+    return roomList.some((r: any) => {
+      const status = r.status ?? hotel.status ?? "available";
+      // isRoomAvailable checks bookings in localStorage if none passed
+      return (
+        status === "available" &&
+        isRoomAvailable(
+          r.id ?? undefined,
+          r.number ?? undefined,
+          hotel.id ?? undefined,
+          checkin || undefined,
+          checkout || undefined
+        )
       );
-  }, [hotelsData, searchParams, isLoading]);
+    });
+  });
 
   if (isLoading) {
     return (
@@ -134,22 +142,46 @@ export function HotelListing() {
     );
   }
 
-  if (filteredHotels.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground text-lg">
-          No hotels found matching your criteria.
-        </p>
-        <Button
-          variant="link"
-          className="mt-2"
-          onClick={() => (window.location.href = "/hotels")}
-        >
-          Clear all filters
-        </Button>
-      </div>
-    );
-  }
+  const filteredHotels = visibleHotels
+    .filter((hotel) => {
+      // destination strict match if provided
+      if (destinationQuery) {
+        return String(hotel.location ?? "")
+          .toLowerCase()
+          .includes(destinationQuery);
+      }
+
+      // general search across name/location/description
+      if (generalQuery) {
+        const name = String(hotel.name ?? "").toLowerCase();
+        const loc = String(hotel.location ?? "").toLowerCase();
+        const desc = String(hotel.description ?? "").toLowerCase();
+        return (
+          name.includes(generalQuery) ||
+          loc.includes(generalQuery) ||
+          desc.includes(generalQuery)
+        );
+      }
+
+      return true;
+    })
+    .filter((hotel) => {
+      if (!roomType) return true;
+      // guard hotel.rooms access
+      const rooms = hotel.rooms ?? {};
+      return !!(rooms as any)[roomType];
+    })
+    .filter((hotel) => {
+      const price = Number(hotel.price ?? 0);
+      return price >= minPrice && price <= maxPrice;
+    })
+    .filter((hotel) => {
+      if (amenitiesFilter.length === 0) return true;
+      const hotelAmenities = Array.isArray(hotel.amenities)
+        ? hotel.amenities
+        : [];
+      return amenitiesFilter.every((a) => hotelAmenities.includes(a));
+    });
 
   // In HotelCard rendering, override the View Details button for owner-added rooms
   const renderHotelCard = (hotel: any) => {
@@ -231,7 +263,7 @@ export function HotelListing() {
               {filteredHotels
                 .filter((hotel) => hotel.price > 300)
                 .map((hotel) => (
-                  <HotelCard key={hotel.id} hotel={hotel} />
+                  <HotelCard key={hotel.id} hotel={hotel} listView={false} />
                 ))}
             </div>
           ) : (
@@ -239,7 +271,7 @@ export function HotelListing() {
               {filteredHotels
                 .filter((hotel) => hotel.price > 300)
                 .map((hotel) => (
-                  <HotelCard key={hotel.id} hotel={hotel} listView />
+                  <HotelCard key={hotel.id} hotel={hotel} listView={true} />
                 ))}
             </div>
           )}
@@ -250,7 +282,7 @@ export function HotelListing() {
               {filteredHotels
                 .filter((hotel) => hotel.price <= 200)
                 .map((hotel) => (
-                  <HotelCard key={hotel.id} hotel={hotel} />
+                  <HotelCard key={hotel.id} hotel={hotel} listView={false} />
                 ))}
             </div>
           ) : (
@@ -258,7 +290,7 @@ export function HotelListing() {
               {filteredHotels
                 .filter((hotel) => hotel.price <= 200)
                 .map((hotel) => (
-                  <HotelCard key={hotel.id} hotel={hotel} listView />
+                  <HotelCard key={hotel.id} hotel={hotel} listView={true} />
                 ))}
             </div>
           )}
@@ -267,25 +299,29 @@ export function HotelListing() {
           {viewMode === "grid" ? (
             <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredHotels
-                .filter((hotel) =>
-                  hotel.amenities.some((a) =>
-                    ["Pool", "Restaurant", "WiFi"].includes(a)
-                  )
+                .filter(
+                  (hotel) =>
+                    Array.isArray(hotel.amenities) &&
+                    hotel.amenities.some((a) =>
+                      ["Pool", "Restaurant", "WiFi"].includes(a)
+                    )
                 )
                 .map((hotel) => (
-                  <HotelCard key={hotel.id} hotel={hotel} />
+                  <HotelCard key={hotel.id} hotel={hotel} listView={false} />
                 ))}
             </div>
           ) : (
             <div className="space-y-4">
               {filteredHotels
-                .filter((hotel) =>
-                  hotel.amenities.some((a) =>
-                    ["Pool", "Restaurant", "WiFi"].includes(a)
-                  )
+                .filter(
+                  (hotel) =>
+                    Array.isArray(hotel.amenities) &&
+                    hotel.amenities.some((a) =>
+                      ["Pool", "Restaurant", "WiFi"].includes(a)
+                    )
                 )
                 .map((hotel) => (
-                  <HotelCard key={hotel.id} hotel={hotel} listView />
+                  <HotelCard key={hotel.id} hotel={hotel} listView={true} />
                 ))}
             </div>
           )}
@@ -295,3 +331,43 @@ export function HotelListing() {
     </div>
   );
 }
+
+// export const datesOverlap = (
+//   aStart: string | Date,
+//   aEnd: string | Date,
+//   bStart: string | Date,
+//   bEnd: string | Date
+// ) => {
+//   const s1 = new Date(aStart).getTime();
+//   const e1 = new Date(aEnd).getTime();
+//   const s2 = new Date(bStart).getTime();
+//   const e2 = new Date(bEnd).getTime();
+//   // Intervals overlap when they intersect (treat checkout as exclusive)
+//   return !(e1 <= s2 || s1 >= e2);
+// };
+
+// export const isRoomAvailable = (
+//   // match by roomId, roomNumber or hotelId depending on your booking shape
+//   roomId: number | string | undefined,
+//   roomNumber: string | undefined,
+//   hotelId: number | string | undefined,
+//   checkin: string | undefined,
+//   checkout: string | undefined,
+//   bookingsSource?: any[]
+// ) => {
+//   if (!checkin || !checkout) return true; // no date filter -> treat as available
+//   const bookings =
+//     bookingsSource ?? JSON.parse(localStorage.getItem("bookings") || "[]");
+//   return !bookings.some((b: any) => {
+//     // adapt these keys to your booking objects if different
+//     const same =
+//       (roomId && String(b.roomId) === String(roomId)) ||
+//       (roomNumber && b.roomNumber === roomNumber) ||
+//       (hotelId && String(b.hotelId) === String(hotelId));
+//     if (!same) return false;
+//     const bStart = b.checkinDate ?? b.startDate ?? b.start;
+//     const bEnd = b.checkoutDate ?? b.endDate ?? b.end;
+//     if (!bStart || !bEnd) return false;
+//     return datesOverlap(checkin, checkout, bStart, bEnd);
+//   });
+// };

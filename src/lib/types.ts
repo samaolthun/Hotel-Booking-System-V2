@@ -1,23 +1,23 @@
 export interface Hotel {
+  photo: string;
   id: number;
   name: string;
   location: string;
   mapEmbed: string;
   price: number;
-  image: string; // Keep for backward compatibility if needed, but prefer images array
-  images: string[]; // New field for multiple images
+  image?: string;
+  images?: string[];
   rating: number;
   description: string;
   amenities: string[];
-  status?: "available" | "occupied" | "maintenance"; // Optional status for owner-added rooms
   rooms: {
-    [key: string]: { name: string; price: number };
-    standard: { name: string; price: number };
-    deluxe: { name: string; price: number };
-    suite: { name: string; price: number };
-    presidential: { name: string; price: number };
+    [key: string]: {
+      name: string;
+      price: number;
+    };
   };
-  reviews: Review[];
+  reviews: any[];
+  status?: string;
 }
 
 export interface Review {

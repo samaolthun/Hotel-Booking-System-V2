@@ -3,15 +3,15 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/components/ui/dialog"
-import { Button } from "@/src/components/ui/button"
-import { Input } from "@/src/components/ui/input"
-import { Label } from "@/src/components/ui/label"
-import { Separator } from "@/src/components/ui/separator"
-import { useAuth } from "@/src/hooks/use-auth"
-import { useToast } from "@/src/hooks/use-toast"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { useAuth } from "@/hooks/use-auth"
+import { useToast } from "@/hooks/use-toast"
 
-import type { AuthContextType } from "@/src/components/providers/auth-provider"
+import type { AuthContextType } from "@/components/providers/auth-provider"
 
 interface AuthModalProps {
   isOpen: boolean

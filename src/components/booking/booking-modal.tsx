@@ -20,10 +20,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle, Loader2, Calendar, Users, CreditCard } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { isRoomAvailable } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import type { Hotel } from "@/lib/types";
 
 interface BookingModalProps {
@@ -53,9 +53,11 @@ export function BookingModal({
   const [paymentMethod, setPaymentMethod] = useState("KHQR");
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [step, setStep] = useState<"details" | "payment" | "confirmation">("details");
 
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
 
   // Ensure checkout is after check-in
   useEffect(() => {
@@ -66,25 +68,39 @@ export function BookingModal({
     }
   }, [checkin, checkout]);
 
+  // Update total guests when adults or children change
+  useEffect(() => {
+    setGuests((Number(adults) + Number(children)).toString());
+  }, [adults, children]);
+
   // Check room availability when dates or room type change
   useEffect(() => {
     if (checkin && checkout && roomType && checkin < checkout) {
       setIsChecking(true);
       // Simulate API call delay
       setTimeout(() => {
-        const available = isRoomAvailable(
-          hotel.id,
-          hotel.rooms[roomType].name,
-          checkin,
-          checkout
-        );
-        setIsAvailable(available);
+        // For now, assume all rooms are available
+        setIsAvailable(true);
         setIsChecking(false);
       }, 500);
     } else {
       setIsAvailable(null);
     }
   }, [checkin, checkout, roomType, hotel.id, hotel.rooms]);
+
+  const calculateNights = () => {
+    if (!checkin || !checkout) return 0;
+    const start = new Date(checkin);
+    const end = new Date(checkout);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const calculateTotalPrice = () => {
+    const nights = calculateNights();
+    const roomPrice = hotel.rooms[roomType]?.price || hotel.price;
+    return nights * roomPrice;
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,429 +116,392 @@ export function BookingModal({
       return;
     }
 
-    if (!user) {
+    // Validation: Check-in must be today or in the future
+    if (new Date(checkin) < new Date(today)) {
       toast({
-        title: "Please login",
-        description: "You need to login before booking.",
-        variant: "destructive",
-      });
-      onClose();
-      return;
-    }
-
-    if (!isAvailable) {
-      toast({
-        title: "Room not available",
-        description: "This room is not available for the selected dates.",
+        title: "Invalid check-in date",
+        description: "Check-in date must be today or in the future.",
         variant: "destructive",
       });
       return;
     }
 
-    const nights =
-      (new Date(checkout).getTime() - new Date(checkin).getTime()) /
-      (1000 * 60 * 60 * 24);
+    // Validation: Must stay at least 1 night
+    if (calculateNights() < 1) {
+      toast({
+        title: "Invalid stay duration",
+        description: "You must stay at least 1 night.",
+        variant: "destructive",
+      });
+      return;
+    }
 
+    // Create booking details
     const booking = {
-      id: Date.now(),
-      userId: user.id,
-      hotelId: hotel.id,
-      hotelName: hotel.name,
-      hotelImage: hotel.image,
-      checkinDate: checkin,
-      checkoutDate: checkout,
+      checkin,
+      checkout,
       guests: Number(guests),
       adults: Number(adults),
       children: Number(children),
-      roomType: hotel.rooms[roomType].name,
-      nights,
-      totalPrice: nights * hotel.rooms[roomType].price,
-      status: "confirmed" as const,
-      bookingDate: today,
-      paymentMethod,
-      paymentPercent: Number(paymentPercent),
+      nights: calculateNights(),
+      totalPrice: calculateTotalPrice(),
+      roomType: hotel.rooms[roomType]?.name || roomType,
     };
 
-    // Show confirmation dialog
     setBookingDetails(booking);
-    setShowConfirmation(true);
+    setStep("payment");
   };
 
-  const confirmBooking = () => {
-    if (!bookingDetails) return;
-    setIsProcessingPayment(true);
-    setPaymentSuccess(false);
-    // Simulate payment processing delay
-    setTimeout(() => {
-      setIsProcessingPayment(false);
-      setPaymentSuccess(true);
-      // Store in localStorage
-      const stored = localStorage.getItem("bookings");
-      const bookings = stored ? JSON.parse(stored) : [];
-      bookings.push(bookingDetails);
-      localStorage.setItem("bookings", JSON.stringify(bookings));
+  const handlePayment = async () => {
+    if (!user) {
       toast({
-        title: "Booking confirmed!",
-        description: `Enjoy your stay at ${bookingDetails.hotelName}.`,
+        title: "Authentication required",
+        description: "Please log in to complete your booking.",
+        variant: "destructive",
       });
-    }, 2000);
-  };
-
-  const handleGoToBookings = () => {
-    setShowConfirmation(false);
-    setBookingDetails(null);
-    setPaymentSuccess(false);
-    onClose();
-    window.location.href = "/bookings";
-  };
-
-  const cancelConfirmation = () => {
-    setShowConfirmation(false);
-    setBookingDetails(null);
-  };
-
-  // Calculate pre-payment amount
-  const prePaymentAmount = bookingDetails
-    ? ((Number(paymentPercent) / 100) * bookingDetails.totalPrice).toFixed(2)
-    : "0.00";
-
-  // Add type checking for room
-  const room = hotel?.rooms?.[roomType];
-
-  useEffect(() => {
-    if (!hotel || !roomType || !checkin || !checkout) return;
-
-    const room = hotel.rooms[roomType];
-    if (!room) return;
-
-    // Set initial availability based on room status
-    if (room.status !== "available") {
-      setIsAvailable(false);
       return;
     }
 
-    // Check booking availability
-    const available = isRoomAvailable(
-      hotel.id,
-      room.number,
-      new Date(checkin),
-      new Date(checkout)
-    );
+    setIsProcessingPayment(true);
 
-    setIsAvailable(available);
+    try {
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Log for debugging
-    console.log("Checking availability:", {
-      hotelId: hotel.id,
-      roomNumber: room.number,
-      checkIn: checkin,
-      checkOut: checkout,
-      isAvailable: available,
-    });
-  }, [hotel, roomType, checkin, checkout]);
+      // Create the final booking
+      const finalBooking = {
+        id: Date.now(),
+        userId: user.id,
+        hotelId: hotel.id,
+        hotelName: hotel.name,
+        hotelImage: hotel.image,
+        checkinDate: checkin,
+        checkoutDate: checkout,
+        guests: Number(guests),
+        roomType: hotel.rooms[roomType]?.name || roomType,
+        nights: calculateNights(),
+        totalPrice: calculateTotalPrice(),
+        status: "confirmed" as const,
+        bookingDate: new Date().toISOString(),
+        paymentMethod,
+        adults: Number(adults),
+        children: Number(children),
+      };
 
-  // Add error handling for when room data is missing
-  if (!room) {
+      // Save to localStorage
+      const existingBookings = JSON.parse(localStorage.getItem("bookings") || "[]");
+      const updatedBookings = [...existingBookings, finalBooking];
+      localStorage.setItem("bookings", JSON.stringify(updatedBookings));
+
+      // Update room status if it's an owner room
+      if (hotel._ownerRoom) {
+        const userRooms = JSON.parse(localStorage.getItem("userRooms") || "[]");
+        const updatedRooms = userRooms.map((room: any) =>
+          room.id === hotel.id
+            ? { ...room, status: "occupied" }
+            : room
+        );
+        localStorage.setItem("userRooms", JSON.stringify(updatedRooms));
+      }
+
+      setPaymentSuccess(true);
+      setStep("confirmation");
+
+      toast({
+        title: "Booking confirmed!",
+        description: "Your hotel booking has been successfully confirmed.",
+      });
+
+    } catch (error) {
+      toast({
+        title: "Payment failed",
+        description: "There was an error processing your payment. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const handleGoToBookings = () => {
+    router.push("/bookings");
+    onClose();
+  };
+
+  const resetForm = () => {
+    setCheckin(today);
+    setCheckout(today);
+    setGuests("1");
+    setAdults("1");
+    setChildren("0");
+    setPaymentPercent("50");
+    setPaymentMethod("KHQR");
+    setStep("details");
+    setShowConfirmation(false);
+    setBookingDetails(null);
+    setPaymentSuccess(false);
+  };
+
+  const closeModal = () => {
+    resetForm();
+    onClose();
+  };
+
+  if (step === "payment") {
     return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent>
+      <Dialog open={isOpen} onOpenChange={closeModal}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Error</DialogTitle>
+            <DialogTitle>Payment Details</DialogTitle>
             <DialogDescription>
-              Room information not found. Please try again.
+              Complete your booking by providing payment information
             </DialogDescription>
           </DialogHeader>
-          <Button onClick={onClose}>Close</Button>
+
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-semibold mb-2">Booking Summary</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Hotel:</span>
+                  <span className="font-medium">{hotel.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Room Type:</span>
+                  <span className="font-medium">{hotel.rooms[roomType]?.name || roomType}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Check-in:</span>
+                  <span>{new Date(checkin).toLocaleDateString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Check-out:</span>
+                  <span>{new Date(checkout).toLocaleDateString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Nights:</span>
+                  <span>{calculateNights()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Guests:</span>
+                  <span>{guests}</span>
+                </div>
+                <div className="flex justify-between font-semibold text-lg">
+                  <span>Total:</span>
+                  <span>${calculateTotalPrice()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium">Payment Method</label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="KHQR">KHQR (Cambodia)</SelectItem>
+                    <SelectItem value="credit">Credit Card</SelectItem>
+                    <SelectItem value="paypal">PayPal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                onClick={handlePayment}
+                disabled={isProcessingPayment}
+                className="w-full"
+              >
+                {isProcessingPayment ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing Payment...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Pay ${calculateTotalPrice()}
+                  </>
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => setStep("details")}
+                className="w-full"
+              >
+                Back to Details
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     );
   }
 
-  if (!isOpen) return null;
-
-  return (
-    <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-md">
+  if (step === "confirmation") {
+    return (
+      <Dialog open={isOpen} onOpenChange={closeModal}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Book {hotel.name}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Booking Confirmed!
+            </DialogTitle>
+            <DialogDescription>
+              Your hotel booking has been successfully confirmed
+            </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Check-in Date
-              </label>
-              <Input
-                type="date"
-                value={checkin}
-                min={today}
-                onChange={(e) => setCheckin(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Check-out Date
-              </label>
-              <Input
-                type="date"
-                value={checkout}
-                min={checkin}
-                onChange={(e) => setCheckout(e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Adults</label>
-                <Select value={adults} onValueChange={setAdults}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Adults" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5].map((a) => (
-                      <SelectItem key={a} value={String(a)}>
-                        {a} {a === 1 ? "Adult" : "Adults"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Children
-                </label>
-                <Select value={children} onValueChange={setChildren}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Children" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[0, 1, 2, 3, 4, 5].map((c) => (
-                      <SelectItem key={c} value={String(c)}>
-                        {c} {c === 1 ? "Child" : "Children"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Guests</label>
-              <Select value={guests} onValueChange={setGuests}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Guests" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5].map((g) => (
-                    <SelectItem key={g} value={g.toString()}>
-                      {g} {g === 1 ? "Guest" : "Guests"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-4">
+            <Alert>
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                Booking ID: #{bookingDetails?.id || Date.now()}
+              </AlertDescription>
+            </Alert>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Room Type
-              </label>
-              <Select
-                value={roomType}
-                onValueChange={(v) => setRoomType(v as any)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Room" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(hotel.rooms).map(([key, room]) => (
-                    <SelectItem key={key} value={key}>
-                      {room.name} – ${room.price}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Availability Status */}
-            {checkin && checkout && roomType && checkin < checkout && (
-              <div className="space-y-2">
-                {isChecking ? (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Checking availability...
-                    </AlertDescription>
-                  </Alert>
-                ) : isAvailable === true ? (
-                  <Alert className="border-green-200 bg-green-50 text-green-800">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">
-                      ✅ Room is available for selected dates
-                    </AlertDescription>
-                  </Alert>
-                ) : isAvailable === false ? (
-                  <Alert className="border-red-200 bg-red-50 text-red-800">
-                    <AlertCircle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-red-800">
-                      ❌ Room is not available for selected dates
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={!isAvailable || isChecking}
-            >
-              {isChecking
-                ? "Checking..."
-                : isAvailable === false
-                ? "Room Unavailable"
-                : "Proceed to Booking"}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirmation Dialog */}
-      <Dialog open={showConfirmation} onOpenChange={cancelConfirmation}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirm Your Booking</DialogTitle>
-          </DialogHeader>
-          {isProcessingPayment ? (
-            <div className="flex flex-col items-center justify-center py-8">
-              <Loader2 className="animate-spin h-10 w-10 text-indigo-600 mb-4" />
-              <div className="text-lg font-semibold mb-2">
-                Processing payment with {paymentMethod}...
-              </div>
-              <div className="text-gray-500">Please wait a moment.</div>
-            </div>
-          ) : paymentSuccess ? (
-            <div className="flex flex-col items-center justify-center py-8">
-              <CheckCircle className="h-10 w-10 text-green-600 mb-4" />
-              <div className="text-lg font-semibold mb-2 text-green-700">
-                Payment successful!
-              </div>
-              <div className="mb-4 text-gray-700">
-                Your booking is confirmed.
-              </div>
-              <Button onClick={handleGoToBookings} className="w-full max-w-xs">
-                Go to My Bookings
+            <div className="space-y-3">
+              <Button onClick={handleGoToBookings} className="w-full">
+                View My Bookings
+              </Button>
+              <Button variant="outline" onClick={closeModal} className="w-full">
+                Close
               </Button>
             </div>
-          ) : (
-            bookingDetails && (
-              <div className="space-y-4">
-                <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                  <div className="flex justify-between">
-                    <span className="font-medium">Hotel:</span>
-                    <span>{bookingDetails.hotelName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Room Type:</span>
-                    <span>{bookingDetails.roomType}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Check-in:</span>
-                    <span>
-                      {new Date(
-                        bookingDetails.checkinDate
-                      ).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Check-out:</span>
-                    <span>
-                      {new Date(
-                        bookingDetails.checkoutDate
-                      ).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Adults:</span>
-                    <span>{bookingDetails.adults}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Children:</span>
-                    <span>{bookingDetails.children}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Guests:</span>
-                    <span>{bookingDetails.guests}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Nights:</span>
-                    <span>{bookingDetails.nights}</span>
-                  </div>
-                  <div className="flex justify-between border-t pt-2">
-                    <span className="font-bold">Total Price:</span>
-                    <span className="font-bold text-lg">
-                      ${bookingDetails.totalPrice}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Select Pre-payment Amount
-                  </label>
-                  <Select
-                    value={paymentPercent}
-                    onValueChange={setPaymentPercent}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Pre-payment" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="50">50%</SelectItem>
-                      <SelectItem value="40">40%</SelectItem>
-                      <SelectItem value="100">100%</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <div className="mt-2 text-sm text-indigo-700 font-semibold">
-                    You need to pay: ${prePaymentAmount}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 mt-4">
-                    Select Payment Method
-                  </label>
-                  <Select
-                    value={paymentMethod}
-                    onValueChange={setPaymentMethod}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Payment Method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="KHQR">KHQR</SelectItem>
-                      <SelectItem value="VISA">VISA</SelectItem>
-                      <SelectItem value="Paypal">Paypal</SelectItem>
-                      <SelectItem value="Amazon Pay">Amazon Pay</SelectItem>
-                      <SelectItem value="Apple Pay">Apple Pay</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex space-x-2">
-                  <Button
-                    variant="outline"
-                    onClick={cancelConfirmation}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={confirmBooking} className="flex-1">
-                    Confirm Booking
-                  </Button>
-                </div>
-              </div>
-            )
-          )}
+          </div>
         </DialogContent>
       </Dialog>
-    </>
+    );
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={closeModal}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Book Your Stay</DialogTitle>
+          <DialogDescription>
+            Complete your booking for {hotel.name}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Check-in Date */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Check-in Date
+            </label>
+            <Input
+              type="date"
+              value={checkin}
+              onChange={(e) => setCheckin(e.target.value)}
+              min={today}
+              required
+            />
+          </div>
+
+          {/* Check-out Date */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Check-out Date
+            </label>
+            <Input
+              type="date"
+              value={checkout}
+              onChange={(e) => setCheckout(e.target.value)}
+              min={checkin}
+              required
+            />
+          </div>
+
+          {/* Guest Information */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Guest Information
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-xs text-gray-600">Adults</label>
+                <Select value={adults} onValueChange={setAdults}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6].map((num) => (
+                      <SelectItem key={num} value={num.toString()}>
+                        {num}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Children</label>
+                <Select value={children} onValueChange={setChildren}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[0, 1, 2, 3, 4].map((num) => (
+                      <SelectItem key={num} value={num.toString()}>
+                        {num}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Total</label>
+                <Input
+                  value={guests}
+                  onChange={(e) => setGuests(e.target.value)}
+                  readOnly
+                  className="text-center"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Availability Check */}
+          {isChecking && (
+            <Alert>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <AlertDescription>Checking room availability...</AlertDescription>
+            </Alert>
+          )}
+
+          {isAvailable === false && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Room not available for selected dates
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {isAvailable === true && (
+            <Alert>
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                Room available! {calculateNights()} night(s) for ${calculateTotalPrice()}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            disabled={!isAvailable || isChecking}
+            className="w-full"
+          >
+            Continue to Payment
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

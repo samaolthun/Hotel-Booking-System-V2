@@ -2,6 +2,7 @@
 const [isRoomDetailsOpen, setIsRoomDetailsOpen] = useState(false);
 import type React from "react";
 
+import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
   Search,
@@ -14,32 +15,32 @@ import {
   AlertCircle,
   Eye,
 } from "lucide-react";
-import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/src/components/ui/card";
-import { Badge } from "@/src/components/ui/badge";
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/src/components/ui/dialog";
-import { Label } from "@/src/components/ui/label";
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/src/components/ui/select";
-import { Textarea } from "@/src/components/ui/textarea";
-import { useToast } from "@/src/hooks/use-toast";
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 import { RoomFormDialog } from "./room-form-dialog";
 
 // Add type for room and booking
@@ -59,6 +60,7 @@ interface Room {
   amenities: string[];
   photo: string;
   lastUpdated: string;
+  rating: number;
 }
 interface Booking {
   id: number;
@@ -96,6 +98,7 @@ export function RoomManagement() {
     rating: "",
   });
   const [isRoomDetailsOpen, setIsRoomDetailsOpen] = useState(false);
+  const router = useRouter();
 
   // Stats calculation
   const totalRooms = rooms.length;
@@ -123,6 +126,8 @@ export function RoomManagement() {
       ...formData,
       id: Date.now(), // Ensure unique ID
       lastUpdated: new Date().toISOString().split("T")[0],
+      rating: 0, // Initialize rating to 0
+      reviews: [] // Initialize empty reviews array
     };
 
     // Get existing rooms from both storages
@@ -610,7 +615,7 @@ export function RoomManagement() {
                           Price: ${room.price}
                         </div>
                         <div className="text-sm text-gray-500">
-                          Rating: {room.rating || "N/A"}
+                          Rating: {room.rating ? room.rating.toFixed(1) : 'No ratings yet'}
                         </div>
                       </div>
                       <Button

@@ -1,5 +1,5 @@
-import { OwnerLayout } from "@/src/components/owner/owner-layout"
-import { OwnerDashboard } from "@/src/components/owner/owner-dashboard"
+import { OwnerLayout } from "@/components/owner/owner-layout"
+import { OwnerDashboard } from "@/components/owner/owner-dashboard"
 
 export default function OwnerHomePage() {
   return (

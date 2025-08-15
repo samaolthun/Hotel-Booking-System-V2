@@ -1,5 +1,5 @@
-import { OwnerLayout } from "@/src/components/owner/owner-layout"
-import { BookingManagement } from "@/src/components/owner/booking-management"
+import { OwnerLayout } from "@/components/owner/owner-layout"
+import { BookingManagement } from "@/components/owner/booking-management"
 
 export default function OwnerBookingsPage() {
   return (

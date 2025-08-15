@@ -1,285 +1,231 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Star } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import React, { useEffect, useState } from "react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
-import type { Hotel, Review, Booking } from "@/lib/types";
+  getReviewsForRoom,
+  saveReviewForRoom,
+  findEligibleBookingForUser,
+  StoredReview,
+} from "../../lib/reviewHelpers";
 
-interface ReviewSectionProps {
-  hotel: Hotel;
+interface ReviewSectionProps { 
+  hotelId: number | string;
+  roomType: string;
 }
 
-export function ReviewSection({ hotel }: ReviewSectionProps) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [rating, setRating] = useState(0);
+export function ReviewSection({ hotelId, roomType }: ReviewSectionProps) {
+  const [reviews, setReviews] = useState<StoredReview[]>([]);
+  const [rating, setRating] = useState<number>(5);
   const [comment, setComment] = useState("");
-  const [roomType, setRoomType] = useState<string>("");
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [userBookings, setUserBookings] = useState<Booking[]>([]);
-  const [averageRating, setAverageRating] = useState(0);
-  const [hasReviewed, setHasReviewed] = useState(false);
+  const [eligibleBooking, setEligibleBooking] = useState<any | null>(null);
 
-  // Load reviews from localStorage
-  useEffect(() => {
-    const storedReviews = localStorage.getItem(`reviews_${hotel.id}`);
-    if (storedReviews) {
-      const parsedReviews = JSON.parse(storedReviews);
-      setReviews(parsedReviews);
-      calculateAverageRating(parsedReviews);
-    } else {
-      setReviews(hotel.reviews || []);
-      calculateAverageRating(hotel.reviews || []);
+  // get current user from localStorage (adjust if you have auth)
+  const getCurrentUser = () => {
+    try {
+      const raw =
+        localStorage.getItem("user") || localStorage.getItem("currentUser");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
     }
-  }, [hotel.id, hotel.reviews]);
-
-  // Load user's bookings to check if they can review
-  useEffect(() => {
-    if (user) {
-      const storedBookings = localStorage.getItem("bookings");
-      const allBookings: Booking[] = storedBookings
-        ? JSON.parse(storedBookings)
-        : [];
-      const userBookingsForThisHotel = allBookings.filter(
-        (booking) => booking.userId === user.id && booking.hotelId === hotel.id
-      );
-      setUserBookings(userBookingsForThisHotel);
-
-      // Check if user has already reviewed this hotel
-      const storedReviews = localStorage.getItem(`reviews_${hotel.id}`);
-      if (storedReviews) {
-        const parsedReviews = JSON.parse(storedReviews);
-        const hasUserReviewed = parsedReviews.some(
-          (review: Review) => review.userId === user.id
-        );
-        setHasReviewed(hasUserReviewed);
-      }
-    }
-  }, [user, hotel.id]);
-
-  const calculateAverageRating = (reviewList: Review[]) => {
-    if (reviewList.length === 0) {
-      setAverageRating(0);
-      return;
-    }
-    const totalRating = reviewList.reduce(
-      (sum, review) => sum + review.rating,
-      0
-    );
-    const average = totalRating / reviewList.length;
-    setAverageRating(Math.round(average * 10) / 10); // Round to 1 decimal place
   };
+
+  useEffect(() => {
+    setReviews(getReviewsForRoom(hotelId, roomType));
+    const user = getCurrentUser();
+    const booking = findEligibleBookingForUser(
+      hotelId,
+      roomType,
+      user?.id ?? user?.userId ?? null
+    );
+    setEligibleBooking(booking);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelId, roomType]);
 
   const submitReview = () => {
-    if (!user) {
-      toast({
-        title: "Login required",
-        description: "Please login to leave a review.",
-        variant: "destructive",
-      });
+    const user = getCurrentUser();
+    if (!eligibleBooking) {
+      alert("You are not eligible to submit a review for this booking.");
       return;
     }
-
-    if (!rating || !comment.trim()) {
-      toast({
-        title: "Incomplete",
-        description: "Please add rating and comment.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (userBookings.length === 0) {
-      toast({
-        title: "Booking required",
-        description: "You must book this hotel before leaving a review.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (hasReviewed) {
-      toast({
-        title: "Already reviewed",
-        description: "You have already reviewed this hotel.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const newReview: Review = {
+    const review: StoredReview = {
       id: Date.now(),
-      userId: user.id,
-      user: user.name,
+      bookingId: eligibleBooking.id,
+      hotelId,
+      roomType,
+      userId: user?.id ?? user?.userId ?? "anonymous",
+      userName: user?.name ?? user?.username ?? "Guest",
       rating,
-      comment: comment.trim(),
-      date: new Date().toISOString().split("T")[0],
-      roomType: roomType || Object.keys(hotel.rooms)[0],
+      comment,
+      date: new Date().toISOString(),
     };
-
-    const updatedReviews = [...reviews, newReview];
-    setReviews(updatedReviews);
-    calculateAverageRating(updatedReviews);
-    setHasReviewed(true);
-
-    // Store in localStorage
-    localStorage.setItem(`reviews_${hotel.id}`, JSON.stringify(updatedReviews));
-
-    // Reset form
-    setRating(0);
+    saveReviewForRoom(hotelId, roomType, review);
+    setReviews((prev) => [review, ...prev]);
+    setEligibleBooking(null);
     setComment("");
-    setRoomType("");
-
-    toast({
-      title: "Thank you!",
-      description: "Your review has been submitted successfully.",
-    });
+    setRating(5);
   };
 
-  const canUserReview = user && userBookings.length > 0 && !hasReviewed;
-
   return (
-    <div className="mt-12">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-semibold">Reviews</h2>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={`w-5 h-5 ${
-                  i < Math.floor(averageRating)
-                    ? "text-yellow-400 fill-yellow-400"
-                    : i < averageRating
-                    ? "text-yellow-400 fill-yellow-400 opacity-50"
-                    : "text-gray-300"
-                }`}
-              />
-            ))}
-          </div>
-          <span className="text-lg font-semibold">{averageRating}</span>
-          <span className="text-gray-500">({reviews.length} reviews)</span>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <h3 className="text-xl font-semibold">Guest feedback for {roomType}</h3>
 
-      {reviews.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <p>No reviews yet. Be the first to review this hotel!</p>
+      {eligibleBooking ? (
+        <div className="p-4 border rounded space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="text-sm">Your rating</label>
+            <select
+              value={rating}
+              onChange={(e) => setRating(Number(e.target.value))}
+              className="ml-2"
+            >
+              {[5, 4, 3, 2, 1].map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Write your feedback..."
+            className="w-full p-2 border rounded"
+          />
+
+          <div className="flex gap-2">
+            <button
+              className="px-3 py-1 bg-primary text-white rounded"
+              onClick={submitReview}
+            >
+              Submit review
+            </button>
+            <button
+              className="px-3 py-1 border rounded"
+              onClick={() => {
+                setComment("");
+                setRating(5);
+              }}
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="text-sm text-muted-foreground">
+            You can leave one review per booking. Reviews can be submitted at or
+            after check-in.
+          </div>
         </div>
       ) : (
-        <div className="space-y-4 mb-8">
-          {reviews.map((rev) => (
-            <div key={rev.id} className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium">{rev.user}</p>
-                  <span className="text-sm text-gray-500">{rev.date}</span>
-                </div>
-                <span className="text-sm text-gray-600">
-                  {hotel.rooms[rev.roomType as keyof typeof hotel.rooms]
-                    ?.name || rev.roomType}
-                </span>
-              </div>
-              <div className="flex items-center mb-2">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`w-4 h-4 ${
-                      i < rev.rating
-                        ? "text-yellow-400 fill-yellow-400"
-                        : "text-gray-300"
-                    }`}
-                  />
-                ))}
-                <span className="ml-2 text-sm text-gray-600">
-                  {rev.rating}/5
-                </span>
-              </div>
-              <p className="text-gray-700">{rev.comment}</p>
-            </div>
-          ))}
+        <div className="text-sm text-muted-foreground">
+          Only guests who have a booking and are on/after check-in can leave
+          feedback.
         </div>
       )}
 
-      {/* Review Form */}
-      <div className="mt-6 space-y-4 border-t pt-6">
-        <h3 className="text-lg font-medium">Leave a Review</h3>
-
-        {!user ? (
-          <div className="text-center py-4 text-gray-500">
-            <p>Please login to leave a review.</p>
-          </div>
-        ) : userBookings.length === 0 ? (
-          <div className="text-center py-4 text-gray-500">
-            <p>You must book this hotel before leaving a review.</p>
-          </div>
-        ) : hasReviewed ? (
-          <div className="text-center py-4 text-green-600">
-            <p>Thank you! You have already reviewed this hotel.</p>
+      <div className="space-y-3">
+        {reviews.length === 0 ? (
+          <div className="text-muted-foreground">
+            No reviews yet for this room.
           </div>
         ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Rating:</span>
-              {[...Array(5)].map((_, i) => (
-                <Star
-                  key={i}
-                  className={`w-6 h-6 cursor-pointer transition-colors ${
-                    i < rating
-                      ? "text-yellow-400 fill-yellow-400"
-                      : "text-gray-300"
-                  }`}
-                  onClick={() => setRating(i + 1)}
-                />
-              ))}
-              <span className="ml-2 text-sm text-gray-600">{rating}/5</span>
+          reviews.map((r) => (
+            <div key={r.id} className="p-3 border rounded">
+              <div className="flex justify-between items-center">
+                <div className="font-medium">{r.userName}</div>
+                <div className="text-sm text-muted-foreground">
+                  {new Date(r.date).toLocaleDateString()}
+                </div>
+              </div>
+              <div className="text-yellow-400">
+                {"★".repeat(r.rating) + "☆".repeat(5 - r.rating)}
+              </div>
+              {r.comment && <div className="mt-2 text-sm">{r.comment}</div>}
             </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Room Type (Optional)
-              </label>
-              <Select value={roomType} onValueChange={setRoomType}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select room type (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(hotel.rooms).map(([key, room]) => (
-                    <SelectItem key={key} value={key}>
-                      {room.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Share your experience with this hotel..."
-              rows={4}
-            />
-
-            <Button
-              onClick={submitReview}
-              disabled={!rating || !comment.trim()}
-              className="w-full"
-            >
-              Submit Review
-            </Button>
-          </>
+          ))
         )}
       </div>
     </div>
   );
+}
+
+{
+  /* export interface StoredReview {
+  id: number;
+  bookingId: number | string;
+  hotelId: number | string;
+  roomType: string;
+  userId: number | string;
+  userName?: string;
+  rating: number;
+  comment?: string;
+  date: string;
+}
+
+export const reviewsKey = (hotelId: number | string, roomType: string) =>
+  `reviews_room_${hotelId}_${roomType}`;
+
+export function getReviewsForRoom(
+  hotelId: number | string,
+  roomType: string
+): StoredReview[] {
+  try {
+    const raw = localStorage.getItem(reviewsKey(hotelId, roomType));
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveReviewForRoom(
+  hotelId: number | string,
+  roomType: string,
+  review: StoredReview
+) {
+  const list = getReviewsForRoom(hotelId, roomType);
+  list.unshift(review);
+  localStorage.setItem(reviewsKey(hotelId, roomType), JSON.stringify(list));
+}
+
+export function findEligibleBookingForUser(
+  hotelId: number | string,
+  roomType: string,
+  userId: number | string | null
+) {
+  if (!userId) return null;
+  try {
+    const stored = localStorage.getItem("bookings");
+    const bookings = stored ? JSON.parse(stored) : [];
+    const today = new Date();
+    for (const b of bookings) {
+      if (String(b.hotelId) !== String(hotelId)) continue;
+      if (b.roomType && b.roomType !== roomType && b.roomNumber !== roomType)
+        continue;
+      const checkin = b.checkinDate
+        ? new Date(b.checkinDate)
+        : b.startDate
+        ? new Date(b.startDate)
+        : null;
+      const checkout = b.checkoutDate
+        ? new Date(b.checkoutDate)
+        : b.endDate
+        ? new Date(b.endDate)
+        : null;
+      if (!checkin || !checkout) continue;
+      if (today >= checkin) {
+        const roomReviews = getReviewsForRoom(hotelId, roomType);
+        const existing = roomReviews.find(
+          (r) =>
+            String(r.bookingId) === String(b.id) &&
+            String(r.userId) === String(userId)
+        );
+        if (!existing) return b;
+      }
+    }
+  } catch (e) {
+    console.error("findEligibleBookingForUser error", e);
+  }
+  return null;
+} */
 }

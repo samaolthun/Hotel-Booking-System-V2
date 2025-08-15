@@ -8,18 +8,18 @@ export default function AdminDashboardPage() {
   const { user, loading } = useAuth();
 
   useEffect(() => {
-    if (!loading && (!user || user.email !== "admin@gmail.com")) {
-      window.location.href = "/";
-    }
+    // if (!loading && (!user || user.email !== "admin@gmail.com")) {
+    //   window.location.href = "/";
+    // }
   }, [user, loading]);
 
   if (loading) {
     return <div>Loading...</div>;
   }
 
-  if (!user || user.email !== "admin@gmail.com") {
-    return null;
-  }
+  // if (!user || user.email !== "admin@gmail.com") {
+  //   return null; // note 
+  // }
 
   return (
     <div className="container mx-auto py-8">

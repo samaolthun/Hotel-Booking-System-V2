@@ -46,6 +46,10 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
     }
   }, [hotel.id]);
 
+  // choose roomType to show reviews for
+  const defaultRoomType = Object.keys(hotel.rooms ?? {})[0] ?? "standard";
+  const reviewRoomTypeToShow = selectedRoomType ?? defaultRoomType;
+
   return (
     <>
       <Link
@@ -122,7 +126,8 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
                       : "bg-red-100 text-red-800 border-red-200"
                   }
                 >
-                  {hotel.status.charAt(0).toUpperCase() + hotel.status.slice(1)}
+                  {hotel.status?.charAt(0).toUpperCase() +
+                    hotel.status?.slice(1) || "Unknown"}
                 </Badge>
               )}
             </div>
@@ -225,17 +230,19 @@ export function HotelDetails({ hotel }: HotelDetailsProps) {
         )}
       </div>
 
-      <ReviewSection hotel={hotel} />
+      <ReviewSection hotelId={hotel.id} roomType={reviewRoomTypeToShow} />
 
-      <BookingModal
-        isOpen={showBookingModal}
-        onClose={() => {
-          setShowBookingModal(false);
-          setSelectedRoomType(null);
-        }}
-        hotel={hotel}
-        roomType={selectedRoomType}
-      />
+      {selectedRoomType !== null && (
+        <BookingModal
+          isOpen={showBookingModal}
+          onClose={() => {
+            setShowBookingModal(false);
+            setSelectedRoomType(null);
+          }}
+          hotel={hotel}
+          roomType={selectedRoomType}
+        />
+      )}
 
       {/* Image Gallery Modal */}
       <HotelImageGallery
